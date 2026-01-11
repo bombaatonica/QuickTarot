@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #f9fafb;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Garantir que inputs tenham fundo branco e texto escuro */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"] {
+  background-color: white;
+  color: #1f2937;
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder {
+  color: #9ca3af;
+}
