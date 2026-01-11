@@ -1,15 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from flask import Blueprint, request, jsonify, abort
+from functools import wraps
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
 from bson import ObjectId
-from ..models.user import UserCreate, UserLogin, UserResponse, UserInDB
+from ..models.user import UserCreate, UserLogin
 from ..db.mongodb import get_database
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
-security = HTTPBearer()
+bp = Blueprint('auth', __name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
@@ -33,26 +32,56 @@ def create_access_token(data: dict) -> str:
     return encoded_jwt
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+def get_current_user():
+    """Extrai o usuário atual do token JWT no header Authorization"""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        abort(401, description="Token não fornecido")
+    
     try:
-        token = credentials.credentials
+        # Formato: "Bearer <token>"
+        scheme, token = auth_header.split(" ", 1)
+        if scheme.lower() != "bearer":
+            abort(401, description="Formato de autenticação inválido")
+    except ValueError:
+        abort(401, description="Formato de autenticação inválido")
+    
+    try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Token inválido")
+            abort(401, description="Token inválido")
         return {"user_id": user_id}
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+        abort(401, description="Token inválido")
 
 
-@router.post("/register", response_model=dict)
-async def register(user_data: UserCreate):
+def require_auth(f):
+    """Decorator para rotas que requerem autenticação"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        current_user = get_current_user()
+        return f(current_user=current_user, *args, **kwargs)
+    return decorated_function
+
+
+@bp.route("/register", methods=["POST"])
+def register():
+    data = request.get_json()
+    if not data:
+        abort(400, description="Dados não fornecidos")
+    
+    try:
+        user_data = UserCreate(**data)
+    except Exception as e:
+        abort(400, description=f"Dados inválidos: {str(e)}")
+    
     db = get_database()
     users_collection = db.users
     
     # Verifica se o email já existe
     if users_collection.find_one({"email": user_data.email}):
-        raise HTTPException(status_code=400, detail="Email já cadastrado")
+        abort(400, description="Email já cadastrado")
     
     # Cria novo usuário
     password_hash = get_password_hash(user_data.password)
@@ -70,7 +99,7 @@ async def register(user_data: UserCreate):
     # Gera token
     access_token = create_access_token(data={"sub": user_id})
     
-    return {
+    return jsonify({
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
@@ -79,25 +108,34 @@ async def register(user_data: UserCreate):
             "name": user_data.name,
             "balance": 0.0
         }
-    }
+    })
 
 
-@router.post("/login", response_model=dict)
-async def login(login_data: UserLogin):
+@bp.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    if not data:
+        abort(400, description="Dados não fornecidos")
+    
+    try:
+        login_data = UserLogin(**data)
+    except Exception as e:
+        abort(400, description=f"Dados inválidos: {str(e)}")
+    
     db = get_database()
     users_collection = db.users
     
     user_doc = users_collection.find_one({"email": login_data.email})
     if not user_doc:
-        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+        abort(401, description="Email ou senha incorretos")
     
     if not verify_password(login_data.password, user_doc["password_hash"]):
-        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+        abort(401, description="Email ou senha incorretos")
     
     user_id = str(user_doc["_id"])
     access_token = create_access_token(data={"sub": user_id})
     
-    return {
+    return jsonify({
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
@@ -106,23 +144,24 @@ async def login(login_data: UserLogin):
             "name": user_doc.get("name"),
             "balance": user_doc.get("balance", 0.0)
         }
-    }
+    })
 
 
-@router.get("/me", response_model=dict)
-async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+@bp.route("/me", methods=["GET"])
+@require_auth
+def get_current_user_info(current_user: dict):
     db = get_database()
     users_collection = db.users
     
     user_obj_id = ObjectId(current_user["user_id"])
     user_doc = users_collection.find_one({"_id": user_obj_id})
     if not user_doc:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        abort(404, description="Usuário não encontrado")
     
-    return {
+    return jsonify({
         "id": str(user_doc["_id"]),
         "email": user_doc["email"],
         "name": user_doc.get("name"),
         "balance": user_doc.get("balance", 0.0),
-        "created_at": user_doc.get("created_at")
-    }
+        "created_at": user_doc.get("created_at").isoformat() if user_doc.get("created_at") else None
+    })

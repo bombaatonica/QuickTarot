@@ -1,5 +1,5 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, jsonify
+from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 
@@ -7,28 +7,23 @@ from .routes import auth, payment, chat
 
 load_dotenv()
 
-app = FastAPI(title="QuickTarot API", version="1.0.0")
+app = Flask(__name__)
 
 # CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+CORS(app, origins=allowed_origins, supports_credentials=True, allow_headers=["*"], methods=["*"])
 
 # Routes
-app.include_router(auth.router)
-app.include_router(payment.router)
-app.include_router(chat.router)
+app.register_blueprint(auth.bp, url_prefix="/api/auth")
+app.register_blueprint(payment.bp, url_prefix="/api/payment")
+app.register_blueprint(chat.bp, url_prefix="/api/chat")
 
 
-@app.get("/")
-async def root():
-    return {"message": "QuickTarot API", "status": "running"}
+@app.route("/")
+def root():
+    return jsonify({"message": "QuickTarot API", "status": "running"})
 
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy"})

@@ -1,31 +1,39 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from ..routes.auth import get_current_user
+from flask import Blueprint, request, jsonify, abort
+from ..routes.auth import require_auth, get_current_user
 from ..db.mongodb import get_database
 from bson import ObjectId
 
-router = APIRouter(prefix="/api/payment", tags=["payment"])
+bp = Blueprint('payment', __name__)
 
 
-class AddCreditRequest(BaseModel):
-    amount: float
-
-
-@router.get("/balance")
-async def get_balance(current_user: dict = Depends(get_current_user)):
+@bp.route("/balance", methods=["GET"])
+@require_auth
+def get_balance(current_user: dict):
     db = get_database()
     users_collection = db.users
     
     user_doc = users_collection.find_one({"_id": ObjectId(current_user["user_id"])})
     if not user_doc:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        abort(404, description="Usuário não encontrado")
     
-    return {"balance": user_doc.get("balance", 0.0)}
+    return jsonify({"balance": user_doc.get("balance", 0.0)})
 
 
-@router.post("/add-credit")
-async def add_credit(request: AddCreditRequest, current_user: dict = Depends(get_current_user)):
+@bp.route("/add-credit", methods=["POST"])
+@require_auth
+def add_credit(current_user: dict):
     """Adiciona crédito ao saldo do usuário (simulado para MVP)"""
+    data = request.get_json()
+    if not data or "amount" not in data:
+        abort(400, description="Dados inválidos: 'amount' é obrigatório")
+    
+    try:
+        amount = float(data["amount"])
+        if amount <= 0:
+            abort(400, description="O valor deve ser maior que zero")
+    except (ValueError, TypeError):
+        abort(400, description="'amount' deve ser um número válido")
+    
     db = get_database()
     users_collection = db.users
     
@@ -33,17 +41,17 @@ async def add_credit(request: AddCreditRequest, current_user: dict = Depends(get
     user_doc = users_collection.find_one({"_id": user_id})
     
     if not user_doc:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        abort(404, description="Usuário não encontrado")
     
     current_balance = user_doc.get("balance", 0.0)
-    new_balance = current_balance + request.amount
+    new_balance = current_balance + amount
     
     users_collection.update_one(
         {"_id": user_id},
         {"$set": {"balance": new_balance}}
     )
     
-    return {"balance": new_balance, "added": request.amount}
+    return jsonify({"balance": new_balance, "added": amount})
 
 
 def deduct_balance(user_id: str, amount: float) -> bool:
