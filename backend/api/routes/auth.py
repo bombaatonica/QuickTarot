@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, abort
 from functools import wraps
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
@@ -9,28 +9,32 @@ from ..models.user import UserCreate, UserLogin
 from ..db.mongodb import get_database
 
 bp = Blueprint('auth', __name__)
-# Inicialização lazy do CryptContext para evitar erro de detecção de bug do bcrypt no Vercel
-_pwd_context = None
 
 SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dias
 
 
-def get_pwd_context():
-    """Retorna o CryptContext, inicializando apenas quando necessário"""
-    global _pwd_context
-    if _pwd_context is None:
-        _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return _pwd_context
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return get_pwd_context().verify(plain_password, hashed_password)
+    """Verifica se a senha corresponde ao hash usando bcrypt"""
+    try:
+        # Se o hash é string, precisa converter para bytes
+        if isinstance(hashed_password, str):
+            hashed_password = hashed_password.encode('utf-8')
+        if isinstance(plain_password, str):
+            plain_password = plain_password.encode('utf-8')
+        return bcrypt.checkpw(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return get_pwd_context().hash(password)
+    """Gera hash da senha usando bcrypt"""
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password, salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: dict) -> str:
