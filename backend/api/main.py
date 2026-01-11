@@ -11,7 +11,11 @@ app = Flask(__name__)
 
 # CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-CORS(app, origins=allowed_origins, supports_credentials=True, allow_headers=["*"], methods=["*"])
+CORS(app, 
+     origins=allowed_origins, 
+     supports_credentials=True, 
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # Routes
 app.register_blueprint(auth.bp, url_prefix="/api/auth")
