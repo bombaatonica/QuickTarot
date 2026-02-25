@@ -17,7 +17,7 @@ interface MessageProps {
 
 export default function Message({ message }: MessageProps) {
   const isUser = message.role === 'user';
-  const { displayedText, isTyping, isFinished, handleUserInteraction } = useTypewriter(message.content);
+const { displayedText, isTyping, isFinished, handleUserInteraction } = useTypewriter(message.content);
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`} onClick={handleUserInteraction}>
