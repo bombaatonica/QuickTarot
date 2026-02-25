@@ -1,4 +1,5 @@
 pydantic
+pydantic[email]
 flask
 flask-cors
 pymongo
