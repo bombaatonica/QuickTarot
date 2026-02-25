@@ -32,7 +32,7 @@ export default function useTypewriter(
     }
   }, [options]);
 
-  const splitIntoSentences = (text: string) => {
+const splitIntoSentences = (text: string) => {
     return text.split('\n').filter(line => line.trim() !== '');
   };
 
