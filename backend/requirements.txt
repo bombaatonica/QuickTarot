@@ -1,6 +1,4 @@
-
-
-
+pydantic
 flask
 flask-cors
 pymongo
