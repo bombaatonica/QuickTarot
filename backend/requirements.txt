@@ -1,5 +1,6 @@
 
 
+
 flask
 flask-cors
 pymongo
@@ -7,4 +8,4 @@ python-dotenv
 requests
 qrcode[pil]
 bcrypt
-jose
+python-jose

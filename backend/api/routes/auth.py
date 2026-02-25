@@ -1,3 +1,4 @@
+
 from flask import Blueprint, request, jsonify, abort
 from functools import wraps
 import bcrypt
@@ -7,6 +8,7 @@ import os
 from bson import ObjectId
 from ..models.user import UserCreate, UserLogin
 from ..db.mongodb import get_database
+
 
 bp = Blueprint('auth', __name__)
 
@@ -37,6 +39,7 @@ def get_password_hash(password: str) -> str:
     return hashed.decode('utf-8')
 
 
+
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -45,12 +48,13 @@ def create_access_token(data: dict) -> str:
     return encoded_jwt
 
 
+
 def get_current_user():
     """Extrai o usuário atual do token JWT no header Authorization"""
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         abort(401, description="Token não fornecido")
-    
+
     try:
         # Formato: "Bearer <token>"
         scheme, token = auth_header.split(" ", 1)
@@ -58,7 +62,7 @@ def get_current_user():
             abort(401, description="Formato de autenticação inválido")
     except ValueError:
         abort(401, description="Formato de autenticação inválido")
-    
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
@@ -96,8 +100,11 @@ def register():
     if users_collection.find_one({"email": user_data.email}):
         abort(400, description="Email já cadastrado")
     
-    # Cria novo usuário
+
+# Cria novo usuário
+
     password_hash = get_password_hash(user_data.password)
+
     user_doc = {
         "email": user_data.email,
         "name": user_data.name,
@@ -105,13 +112,13 @@ def register():
         "balance": 0.0,
         "created_at": datetime.utcnow()
     }
-    
+
     result = users_collection.insert_one(user_doc)
     user_id = str(result.inserted_id)
-    
+
     # Gera token
     access_token = create_access_token(data={"sub": user_id})
-    
+
     return jsonify({
         "access_token": access_token,
         "token_type": "bearer",
