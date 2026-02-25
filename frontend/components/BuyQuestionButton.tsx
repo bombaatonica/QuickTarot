@@ -1,19 +1,24 @@
 'use client';
 
+
 import { useState, useEffect } from 'react';
 import { paymentApi, authApi, User } from '@/lib/api';
+import PixPaymentModal from './PixPaymentModal';
 
 export default function BuyQuestionButton() {
-  const [balance, setBalance] = useState<number>(0);
+
+const [balance, setBalance] = useState<number>(0);
   const [user, setUser] = useState<User | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [creditAmount, setCreditAmount] = useState('10');
+  const [pixModal, setPixModal] = useState(false);
+  const [amount, setAmount] = useState('10.00');
 
   useEffect(() => {
     loadUser();
   }, []);
 
-  const loadUser = async () => {
+
+const loadUser = async () => {
     try {
       const userData = await authApi.getMe();
       setUser(userData);
@@ -29,28 +34,23 @@ export default function BuyQuestionButton() {
     }
   };
 
-  const handleAddCredit = async () => {
-    try {
-      const amount = parseFloat(creditAmount);
-      if (isNaN(amount) || amount <= 0) {
-        alert('Digite um valor válido');
-        return;
-      }
-      const newBalance = await paymentApi.addCredit(amount);
-      setBalance(newBalance);
-      if (user) {
-        user.balance = newBalance;
-        setUser(user);
-        localStorage.setItem('user', JSON.stringify(user));
-      }
-      setShowModal(false);
-      alert(`Crédito de R$ ${amount.toFixed(2)} adicionado!`);
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Erro ao adicionar crédito');
+  const handleAddCredit = () => {
+    setShowModal(false);
+    setPixModal(true);
+  };
+
+  const handlePixPaymentSuccess = async (amount: number) => {
+    const newBalance = await paymentApi.addCredit(amount);
+    setBalance(newBalance);
+    if (user) {
+      user.balance = newBalance;
+      setUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
     }
   };
 
-  return (
+
+return (
     <>
       <div className="flex items-center gap-4">
         <div className="text-sm">
@@ -74,14 +74,14 @@ export default function BuyQuestionButton() {
             </p>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Valor (R$)
+                Valor (R$ mínimo R$ 2,00)
               </label>
               <input
                 type="number"
                 step="0.01"
-                min="1"
-                value={creditAmount}
-                onChange={(e) => setCreditAmount(e.target.value)}
+                min="2"
+                value="10.00"
+                onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
                 placeholder="10.00"
               />
@@ -103,6 +103,12 @@ export default function BuyQuestionButton() {
           </div>
         </div>
       )}
+
+      <PixPaymentModal
+        isOpen={pixModal}
+        onClose={() => setPixModal(false)}
+        onPaymentSuccess={handlePixPaymentSuccess}
+      />
     </>
   );
 }

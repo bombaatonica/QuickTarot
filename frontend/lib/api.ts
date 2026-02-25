@@ -84,15 +84,26 @@ export const authApi = {
   },
 };
 
+
 export const paymentApi = {
   getBalance: async (): Promise<number> => {
     const response = await api.get('/api/payment/balance');
     return response.data.balance;
   },
-  
+
   addCredit: async (amount: number): Promise<number> => {
     const response = await api.post('/api/payment/add-credit', { amount });
     return response.data.balance;
+  },
+
+  createPix: async (data: { amount: number }): Promise<any> => {
+    const response = await api.post('/api/payment/create-pix', data);
+    return response.data;
+  },
+
+  checkStatus: async (transactionId: string): Promise<any> => {
+    const response = await api.get(`/api/payment/check-status/${transactionId}`);
+    return response.data;
   },
 };
 

@@ -1,7 +1,11 @@
+
 from pymongo import MongoClient
 from pymongo.database import Database
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()  # Carrega variáveis do .env
 
 client: Optional[MongoClient] = None
 db: Optional[Database] = None
@@ -14,7 +18,7 @@ def get_database() -> Database:
         mongodb_uri = os.getenv("MONGODB_URI")
         if not mongodb_uri:
             raise ValueError("MONGODB_URI não está definida nas variáveis de ambiente")
-        
+
         global client
         client = MongoClient(mongodb_uri)
         # Extrai o nome do banco da URI ou usa 'quicktarot' como padrão
