@@ -1,10 +1,11 @@
 
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 
-from .routes import auth, payment, chat, webhook
+from .routes import auth, payment, chat
 
 load_dotenv()
 
@@ -22,7 +23,6 @@ CORS(app,
 app.register_blueprint(auth.bp, url_prefix="/api/auth")
 app.register_blueprint(payment.bp, url_prefix="/api/payment")
 app.register_blueprint(chat.bp, url_prefix="/api/chat")
-app.register_blueprint(webhook.bp, url_prefix="/api")
 
 
 @app.route("/")
