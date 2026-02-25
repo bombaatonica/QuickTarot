@@ -12,7 +12,8 @@ export default function TarotCards({ cards }: TarotCardsProps) {
       {cards.map((card, index) => (
         <div
           key={index}
-          className="bg-gradient-to-br from-purple-100 to-purple-200 border-2 border-purple-300 rounded-lg p-3 text-center"
+          className="bg-gradient-to-br from-purple-100 to-purple-200 border-2 border-purple-300 rounded-lg p-3 text-center animate-fade-in"
+          style={{ animationDelay: `${index * 0.1}s` }}
         >
           <div className="font-semibold text-purple-900 text-sm mb-1">
             {card.name}
