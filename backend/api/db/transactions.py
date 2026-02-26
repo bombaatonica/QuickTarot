@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from .mongodb import get_database
+from datetime import datetime
 
 def get_transactions_collection():
     db = get_database()
@@ -10,6 +11,7 @@ def create_transaction_index():
     collection = get_transactions_collection()
     collection.create_index("user_id")
     collection.create_index("charge_id")
+    collection.create_index("identifier")
     collection.create_index("status")
     collection.create_index("created_at")
 
@@ -25,6 +27,10 @@ def get_transaction(transaction_id: str):
 def get_transaction_by_charge_id(charge_id: str):
     collection = get_transactions_collection()
     return collection.find_one({"charge_id": charge_id})
+
+def get_transaction_by_identifier(identifier: str):
+    collection = get_transactions_collection()
+    return collection.find_one({"identifier": identifier})
 
 def update_transaction(transaction_id: str, update_data: dict):
     collection = get_transactions_collection()

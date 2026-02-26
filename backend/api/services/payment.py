@@ -3,35 +3,51 @@ from qrcode import make as generate_qr
 from io import BytesIO
 from base64 import b64encode
 from datetime import datetime
+from typing import Optional
 
-class OasyfyService:
-    def __init__(self, api_key: str, base_url: str = "https://api.oasyfy.com"):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+class OasisPayService:
+    def __init__(
+        self,
+        public_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+    ):
+        self.base_url = "https://app.oasyfy.com/api/v1"
+        self.public_key = public_key
+        self.secret_key = secret_key
 
-    def create_pix_charge(self, amount: float, description: str) -> dict:
-        """Cria uma cobrança Pix"""
-        url = f"{self.base_url}/v1/pix/charges"
+    def _build_headers(self) -> dict:
+        headers = {"Content-Type": "application/json"}
+        if self.public_key:
+            headers["X-Public-Key"] = self.public_key
+        if self.secret_key:
+            headers["X-Secret-Key"] = self.secret_key
+        return headers
+
+    def receive_pix(
+        self,
+        identifier: str,
+        amount: float,
+        client: dict,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Cria uma transação para receber Pix (OasisPay)."""
+        url = f"{self.base_url}/gateway/pix/receive"
+
         payload = {
+            "identifier": identifier,
             "amount": amount,
-            "description": description,
-            "currency": "BRL",
-            "payment_type": "PIX"
+            "client": client,
         }
-        response = requests.post(url, json=payload, headers=self.headers)
+        if metadata is not None:
+            payload["metadata"] = metadata
+
+        response = requests.post(url, json=payload, headers=self._build_headers())
         response.raise_for_status()
         return response.json()
 
     def get_charge_status(self, charge_id: str) -> dict:
-        """Verifica status da cobrança"""
-        url = f"{self.base_url}/v1/pix/charges/{charge_id}"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
+        """Mantido por compatibilidade (status via polling pode ser ajustado conforme doc de consultas)."""
+        raise NotImplementedError("Status via polling não está configurado para o OasisPay")
 
     def generate_qr_code(self, payload: str) -> str:
         """Gera QR Code em base64"""

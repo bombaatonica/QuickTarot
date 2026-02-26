@@ -2,18 +2,28 @@ from flask import Blueprint, request, jsonify, abort
 from ..routes.auth import require_auth, get_current_user
 from ..db.mongodb import get_database
 from bson import ObjectId
-from ..services.payment import OasyfyService
+from ..services.payment import OasisPayService
 from ..models.payment import Transaction
 from ..db.transactions import (
     create_transaction,
     get_transaction,
     update_transaction_status,
-    get_transaction_by_charge_id
+    get_transaction_by_charge_id,
+    get_transaction_by_identifier
 )
 import os
+import uuid
 
 bp = Blueprint('payment', __name__)
-oasyfy_service = OasyfyService(os.getenv("OASYF_API_KEY"))
+
+oasis_service = OasisPayService(
+    public_key=os.getenv("OASIS_PUBLIC_KEY"),
+    secret_key=os.getenv("OASIS_SECRET_KEY"),
+)
+
+webhook_validation_token = os.getenv("OASIS_WEBHOOK_TOKEN")
+
+
 @bp.route("/balance", methods=["GET"])
 @require_auth
 def get_balance(current_user: dict):
@@ -66,7 +76,7 @@ def add_credit(current_user: dict):
 @bp.route("/create-pix", methods=["POST"])
 @require_auth
 def create_pix(current_user: dict):
-    """Cria cobrança Pix via Oasyfy"""
+    """Cria cobrança Pix via OasisPay"""
     data = request.get_json()
     if not data or "amount" not in data:
         abort(400, description="Dados inválidos: 'amount' é obrigatório")
@@ -78,32 +88,47 @@ def create_pix(current_user: dict):
     except (ValueError, TypeError):
         abort(400, description="'amount' deve ser um número válido")
 
-    # Criar cobrança no Oasyfy
+    # Criar cobrança no OasisPay
     try:
-        charge = oasyfy_service.create_pix_charge(
+        identifier = uuid.uuid4().hex
+
+        client = {
+            "name": current_user.get("email", "Cliente"),
+            "email": current_user.get("email"),
+        }
+
+        pix_response = oasis_service.receive_pix(
+            identifier=identifier,
             amount=amount,
-            description=f"Créditos QuickTarot - {current_user['email']}"
+            client=client,
+            metadata={"provider": "QuickTarot"},
         )
+
+        gateway_transaction_id = pix_response.get("transactionId")
+        pix_obj = pix_response.get("pix") or {}
+        pix_code = pix_obj.get("code")
+        qr_code = pix_obj.get("base64")
+
+        if not gateway_transaction_id or not pix_code or not qr_code:
+            abort(500, description="Resposta inválida do provedor de pagamento")
 
         # Salvar transação no banco
         transaction_data = {
             "user_id": str(current_user["user_id"]),
             "amount": amount,
-            "charge_id": charge["id"],
+            "charge_id": gateway_transaction_id,
+            "identifier": identifier,
             "status": "pending",
-            "pix_code": charge["pix_code"],
-            "qr_code_payload": charge["qr_code_payload"]
+            "pix_code": pix_code,
+            "qr_code_payload": pix_code
         }
         transaction_id = create_transaction(transaction_data)
-
-        # Gerar QR Code
-        qr_code = oasyfy_service.generate_qr_code(charge["qr_code_payload"])
 
         return jsonify({
             "success": True,
             "transaction_id": str(transaction_id),
             "amount": amount,
-            "pix_code": charge["pix_code"],
+            "pix_code": pix_code,
             "qr_code": qr_code,
             "status": "pending"
         })
@@ -129,60 +154,44 @@ def check_status(current_user: dict, transaction_id: str):
             "amount": transaction["amount"]
         })
 
-    # Verificar status com Oasyfy
-    try:
-        charge_status = oasyfy_service.get_charge_status(transaction["charge_id"])
-
-        if charge_status["status"] == "paid":
-            # Atualizar saldo do usuário
-            db = get_database()
-            users_collection = db.users
-            users_collection.update_one(
-                {"_id": ObjectId(current_user["user_id"])},
-                {"$inc": {"balance": transaction["amount"]}}
-            )
-            # Atualizar status da transação
-            update_transaction_status(transaction_id, "paid")
-            return jsonify({
-                "status": "paid",
-                "amount": transaction["amount"]
-            })
-        elif charge_status["status"] == "expired":
-            update_transaction_status(transaction_id, "expired")
-            return jsonify({
-                "status": "expired",
-                "amount": transaction["amount"]
-            })
-
-        return jsonify({
-            "status": "pending",
-            "amount": transaction["amount"]
-        })
-
-    except Exception as e:
-        abort(500, description=f"Erro ao verificar status: {str(e)}")
+    return jsonify({
+        "status": "pending",
+        "amount": transaction["amount"]
+    })
 
 
 @bp.route("/webhook", methods=["POST"])
 def webhook():
-    """Recebe notificações do Oasyfy"""
+    """Recebe notificações do OasisPay"""
     data = request.get_json()
 
     if not data or "event" not in data:
         return jsonify({"error": "Dados inválidos"}), 400
 
-    if data["event"] == "charge.paid":
-        charge_id = data["data"]["id"]
-        amount = float(data["data"]["amount"])
+    if webhook_validation_token:
+        if data.get("token") != webhook_validation_token:
+            return jsonify({"error": "Token inválido"}), 401
 
-        # Atualizar transação e saldo
-        transaction = get_transaction_by_charge_id(charge_id)
-        if transaction and transaction["status"] == "pending":
+    if data["event"] == "TRANSACTION_PAID":
+        transaction_obj = data.get("transaction") or {}
+        identifier = transaction_obj.get("identifier")
+        amount = transaction_obj.get("amount")
+
+        if not identifier:
+            return jsonify({"error": "Identifier ausente"}), 400
+
+        try:
+            amount_value = float(amount)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Valor inválido"}), 400
+
+        transaction = get_transaction_by_identifier(identifier)
+        if transaction and transaction.get("status") == "pending":
             db = get_database()
             users_collection = db.users
             users_collection.update_one(
                 {"_id": ObjectId(transaction["user_id"])},
-                {"$inc": {"balance": amount}}
+                {"$inc": {"balance": amount_value}}
             )
             update_transaction_status(str(transaction["_id"]), "paid")
 
