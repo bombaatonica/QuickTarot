@@ -66,7 +66,7 @@ export default function AnimatedTarotCard({ card, index, delay, onRevealed }: An
   }
 
   return (
-    <div className="relative w-full h-64 perspective-1000">
+    <div className="relative w-full h-48 sm:h-56 lg:h-64 perspective-1000">
       <div
         className={`relative w-full h-full transition-all duration-700 transform-style-preserve-3d ${
           isRevealed ? 'rotate-y-180' : ''

@@ -25,8 +25,8 @@ export default function Message({ message }: MessageProps) {
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-3xl ${isUser ? 'bg-purple-600 text-white' : 'bg-white text-gray-900'} rounded-lg p-4 shadow-sm`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-2 sm:px-0`}>
+      <div className={`max-w-full sm:max-w-2xl lg:max-w-3xl ${isUser ? 'bg-purple-600 text-white' : 'bg-white text-gray-900'} rounded-lg p-3 sm:p-4 shadow-sm`}>
         {!isUser && message.cards && (
           <div className="mb-4">
             <TarotCards 
