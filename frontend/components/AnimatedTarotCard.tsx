@@ -15,8 +15,12 @@ export default function AnimatedTarotCard({ card, index, delay }: AnimatedTarotC
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
+  console.log('Card received:', card.name); // Debug log
+  
   const cardData = getTarotCardByNamePt(card.name);
   const imageUrl = cardData?.image_url || '';
+  
+  console.log('Card data found:', cardData?.namePt, 'Image URL:', imageUrl); // Debug log
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -28,9 +32,16 @@ export default function AnimatedTarotCard({ card, index, delay }: AnimatedTarotC
 
   useEffect(() => {
     if (imageUrl && isRevealed) {
+      console.log('Loading image:', imageUrl); // Debug log
       const img = new Image();
-      img.onload = () => setImageLoaded(true);
-      img.onerror = () => setImageError(true);
+      img.onload = () => {
+        console.log('Image loaded successfully:', imageUrl);
+        setImageLoaded(true);
+      };
+      img.onerror = () => {
+        console.log('Image failed to load:', imageUrl);
+        setImageError(true);
+      };
       img.src = imageUrl;
     }
   }, [imageUrl, isRevealed]);
