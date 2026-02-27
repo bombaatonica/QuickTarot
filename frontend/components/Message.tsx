@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import TarotCards from './TarotCards';
-import TypewriterText from './TypewriterText';
+import FormattedTarotText from './FormattedTarotText';
 import { TarotCard } from '@/lib/api';
 
 interface Message {
@@ -37,10 +37,10 @@ export default function Message({ message }: MessageProps) {
         )}
         {!isUser && message.cards ? (
           showInterpretation ? (
-            <div className="whitespace-pre-wrap">
-              <TypewriterText 
+            <div>
+              <FormattedTarotText 
                 text={message.content} 
-                speed={10} // velocidade 2x mais rápida
+                speed={3} // velocidade 3x mais rápida
               />
             </div>
           ) : (
