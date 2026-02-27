@@ -5,9 +5,11 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 
-from .routes import auth, payment, chat
-
+_dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(dotenv_path=_dotenv_path)
 load_dotenv()
+
+from .routes import auth, payment, chat
 
 app = Flask(__name__)
 

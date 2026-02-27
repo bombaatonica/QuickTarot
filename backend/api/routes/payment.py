@@ -13,6 +13,7 @@ from ..db.transactions import (
 )
 import os
 import uuid
+import requests
 
 bp = Blueprint('payment', __name__)
 
@@ -81,6 +82,9 @@ def create_pix(current_user: dict):
     if not data or "amount" not in data:
         abort(400, description="Dados inválidos: 'amount' é obrigatório")
 
+    if not os.getenv("OASIS_PUBLIC_KEY") or not os.getenv("OASIS_SECRET_KEY"):
+        abort(500, description="Configuração inválida: defina OASIS_PUBLIC_KEY e OASIS_SECRET_KEY no backend/.env")
+
     try:
         amount = float(data["amount"])
         if amount < 2.0:
@@ -133,6 +137,25 @@ def create_pix(current_user: dict):
             "status": "pending"
         })
 
+    except requests.exceptions.HTTPError as e:
+        resp = getattr(e, "response", None)
+        status_code = getattr(resp, "status_code", 502)
+        try:
+            details = resp.json() if resp is not None else None
+        except Exception:
+            details = {"message": resp.text} if resp is not None else None
+
+        return jsonify({
+            "success": False,
+            "error": "Erro do provedor de pagamento",
+            "provider_status": status_code,
+            "provider_response": details,
+        }), 502
+    except requests.exceptions.RequestException:
+        return jsonify({
+            "success": False,
+            "error": "Falha de comunicação com o provedor de pagamento",
+        }), 502
     except Exception as e:
         abort(500, description=f"Erro ao criar cobrança: {str(e)}")
 
