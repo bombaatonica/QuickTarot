@@ -21,22 +21,34 @@ def generate_tarot_interpretation(question: str, cards: List[Card]) -> str:
     
     cards_text = format_cards_for_llm(cards)
     
-    prompt = f"""Você é um especialista em tarot com anos de experiência. Um cliente fez a seguinte pergunta:
+    prompt = f"""Você é um tarólogo experiente e compassivo. Um cliente fez a seguinte pergunta:
 
 "{question}"
 
 Foram sorteadas as seguintes 9 cartas de tarot:
 {cards_text}
 
-Por favor, forneça uma interpretação detalhada e personalizada dessas cartas em relação à pergunta do cliente. Seja específico, compassivo e útil. Explique como as cartas se relacionam entre si e como elas respondem à pergunta do cliente.
+Por favor, forneça uma interpretação detalhada e personalizada dessas cartas em relação à pergunta do cliente. Siga EXATAMENTE esta estrutura:
 
-Formato da resposta:
-- Comece com uma visão geral da tiragem
-- Interprete cada carta no contexto da pergunta
-- Explique como as cartas trabalham juntas
-- Forneça insights práticos e orientação
+**Visão Geral da Tiragem**
+[Parágrafo inicial com a visão geral e tema principal da tiragem]
 
-Responda em português brasileiro, de forma clara e acessível."""
+**Interpretação de Cada Carta**
+1. **[Nome da Carta 1]**: [Interpretação detalhada]
+2. **[Nome da Carta 2]**: [Interpretação detalhada]
+[Continue para todas as 9 cartas]
+
+**Como as Cartas Trabalham Juntas**
+[Parágrafo explicando a sinergia entre as cartas e a mensagem unificada]
+
+**Insights Práticos e Orientação**
+• [Insight prático 1]
+• [Insight prático 2]
+• [Insight prático 3]
+
+Use **negrito** para títulos, **números** para cartas e **bullet points (•)** para insights.
+Seja específico, compassivo e inspirador. Responda em português brasileiro.
+"""
 
     # Lista de modelos para tentar (em ordem de preferência)
     models_to_try = [

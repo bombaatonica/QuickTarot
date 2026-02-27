@@ -11,7 +11,7 @@ interface TypewriterTextProps {
 
 export default function TypewriterText({ 
   text, 
-  speed = 30, // velocidade em ms (padrão rápido)
+  speed = 10, // velocidade em ms (2x mais rápido)
   onComplete,
   className = ''
 }: TypewriterTextProps) {

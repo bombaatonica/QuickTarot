@@ -40,7 +40,7 @@ export default function Message({ message }: MessageProps) {
             <div className="whitespace-pre-wrap">
               <TypewriterText 
                 text={message.content} 
-                speed={20} // velocidade rápida de digitação
+                speed={10} // velocidade 2x mais rápida
               />
             </div>
           ) : (
