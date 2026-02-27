@@ -92,11 +92,6 @@ def create_pix(current_user: dict):
     except (ValueError, TypeError):
         abort(400, description="'amount' deve ser um número válido")
 
-    phone = data.get("phone")
-    document = data.get("document")
-    if not phone or not document:
-        abort(400, description="Dados inválidos: 'phone' e 'document' são obrigatórios")
-
     # Criar cobrança no OasisPay
     try:
         identifier = uuid.uuid4().hex
@@ -109,8 +104,8 @@ def create_pix(current_user: dict):
         client = {
             "name": email or "Cliente",
             "email": email,
-            "phone": phone,
-            "document": document,
+            "phone": "(99) 99999-9999",
+            "document": "000.000.000-00",
         }
 
         pix_response = oasis_service.receive_pix(
