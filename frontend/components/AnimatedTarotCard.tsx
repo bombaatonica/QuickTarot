@@ -4,9 +4,6 @@ import { useState, useEffect } from 'react';
 import { TarotCard } from '@/lib/api';
 import { getTarotCardByNamePt } from '@/data/tarot-data';
 
-// Cache para imagens já carregadas
-const imageCache = new Set<string>();
-
 interface AnimatedTarotCardProps {
   card: TarotCard;
   index: number;
@@ -24,6 +21,7 @@ export default function AnimatedTarotCard({ card, index, delay, onRevealed }: An
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      console.log(`Card ${index}: Starting reveal animation`);
       setIsRevealed(true);
       onRevealed?.(); // Chamar callback quando a carta for revelada
     }, delay * 1000);
@@ -32,19 +30,19 @@ export default function AnimatedTarotCard({ card, index, delay, onRevealed }: An
   }, [delay, onRevealed]);
 
   useEffect(() => {
-    if (imageUrl && isRevealed && !imageLoaded && !imageError && !imageCache.has(imageUrl)) {
-      imageCache.add(imageUrl); // Adicionar ao cache
+    console.log(`Card ${index}: isRevealed=${isRevealed}, imageLoaded=${imageLoaded}, imageError=${imageError}`);
+    if (imageUrl && isRevealed && !imageLoaded && !imageError) {
+      console.log(`Card ${index}: Loading image ${imageUrl}`);
       const img = new Image();
       img.onload = () => {
+        console.log(`Card ${index}: Image loaded successfully`);
         setImageLoaded(true);
       };
       img.onerror = () => {
+        console.log(`Card ${index}: Image failed to load`);
         setImageError(true);
       };
       img.src = imageUrl;
-    } else if (imageUrl && imageCache.has(imageUrl)) {
-      // Se já está no cache, considera como carregado
-      setImageLoaded(true);
     }
   }, [imageUrl, isRevealed, imageLoaded, imageError]);
 
