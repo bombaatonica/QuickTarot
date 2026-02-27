@@ -12,7 +12,7 @@ interface AnimatedTarotCardProps {
 }
 
 export default function AnimatedTarotCard({ card, index, delay, onRevealed }: AnimatedTarotCardProps) {
-  const [isRevealed, setIsRevealed] = useState(false);
+  const [isRevealed, setIsRevealed] = useState(true); // Começa já revelada
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
@@ -20,18 +20,13 @@ export default function AnimatedTarotCard({ card, index, delay, onRevealed }: An
   const imageUrl = cardData?.image_url || '';
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      console.log(`Card ${index}: Starting reveal animation`);
-      setIsRevealed(true);
-      onRevealed?.(); // Chamar callback quando a carta for revelada
-    }, delay * 1000);
-
-    return () => clearTimeout(timer);
-  }, [delay, onRevealed]);
+    // Chamar callback imediatamente
+    onRevealed?.();
+  }, [onRevealed]);
 
   useEffect(() => {
     console.log(`Card ${index}: isRevealed=${isRevealed}, imageLoaded=${imageLoaded}, imageError=${imageError}`);
-    if (imageUrl && isRevealed && !imageLoaded && !imageError) {
+    if (imageUrl && !imageLoaded && !imageError) {
       console.log(`Card ${index}: Loading image ${imageUrl}`);
       const img = new Image();
       img.onload = () => {
@@ -44,7 +39,7 @@ export default function AnimatedTarotCard({ card, index, delay, onRevealed }: An
       };
       img.src = imageUrl;
     }
-  }, [imageUrl, isRevealed, imageLoaded, imageError]);
+  }, [imageUrl, imageLoaded, imageError]);
 
   if (!cardData) {
     // Fallback para cards não encontrados

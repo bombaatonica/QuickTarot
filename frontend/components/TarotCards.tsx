@@ -32,7 +32,7 @@ export default function TarotCards({ cards, onAnimationComplete }: TarotCardsPro
           key={index}
           card={card}
           index={index}
-          delay={index * 2} // 2 segundos delay entre cada carta
+          delay={0} // Sem delay - todas aparecem de uma vez
           onRevealed={() => handleCardRevealed(index)}
         />
       ))}

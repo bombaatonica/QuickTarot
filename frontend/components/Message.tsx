@@ -17,7 +17,7 @@ interface MessageProps {
 }
 
 export default function Message({ message }: MessageProps) {
-  const [showInterpretation, setShowInterpretation] = useState(false);
+  const [showInterpretation, setShowInterpretation] = useState(true); // Começa já mostrando
   const isUser = message.role === 'user';
 
   const handleAnimationComplete = () => {
