@@ -18,6 +18,7 @@ export default function PixPaymentModal({
   const [transaction, setTransaction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const createPixPayment = async () => {
     try {
@@ -70,25 +71,35 @@ export default function PixPaymentModal({
         {transaction ? (
           <>
             <div className="mb-4">
-              <p className="text-gray-600 mb-2">Pague com Pix e ganhe créditos instantaneamente!</p>
-              <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                <p className="font-mono text-sm text-blue-900 mb-2">Código Pix:</p>
-                <p className="font-bold text-lg text-blue-900 mb-2">{transaction.pix_code}</p>
+              <p className="text-gray-600 mb-4 text-center">Pague com Pix e ganhe créditos instantaneamente!</p>
+              
+              <div className="mb-4">
+                <img 
+                  src={transaction.qr_code} 
+                  alt="QR Code Pix" 
+                  className="mx-auto block w-48 h-48 mb-2 border rounded-lg"
+                />
+                <p className="text-sm text-gray-500 text-center mb-4">
+                  Escaneie o QR Code acima para pagar
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <p className="font-mono text-sm text-gray-700 mb-2">Ou copie o código Pix:</p>
+                <div className="bg-gray-100 p-3 rounded-lg mb-2">
+                  <p className="break-words font-mono text-sm text-gray-900">{transaction.pix_code}</p>
+                </div>
                 <button 
-                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                  onClick={() => navigator.clipboard.writeText(transaction.pix_code)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(transaction.pix_code);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
                 >
-                  Copiar código
+                  {copied ? 'Copiado ✓' : 'Copiar código'}
                 </button>
               </div>
-              <img 
-                src={transaction.qr_code} 
-                alt="QR Code Pix" 
-                className="w-full mb-4"
-              />
-              <p className="text-sm text-gray-500 text-center">
-                Escaneie o QR Code ou use o código acima para pagar
-              </p>
             </div>
 
             <div className="mb-4">
