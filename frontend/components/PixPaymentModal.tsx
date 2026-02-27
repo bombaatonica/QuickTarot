@@ -75,7 +75,7 @@ export default function PixPaymentModal({
               
               <div className="mb-4">
                 <img 
-                  src={transaction.qr_code} 
+                  src={transaction.qr_code.startsWith('data:') ? transaction.qr_code : `data:image/png;base64,${transaction.qr_code}`}
                   alt="QR Code Pix" 
                   className="mx-auto block w-48 h-48 mb-2 border rounded-lg"
                 />
