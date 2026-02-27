@@ -96,7 +96,7 @@ export const paymentApi = {
     return response.data.balance;
   },
 
-  createPix: async (data: { amount: number }): Promise<any> => {
+  createPix: async (data: { amount: number; phone: string; document: string }): Promise<any> => {
     const response = await api.post('/api/payment/create-pix', data);
     return response.data;
   },

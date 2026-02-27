@@ -15,6 +15,8 @@ export default function PixPaymentModal({
   onPaymentSuccess,
 }: PixPaymentModalProps) {
   const [amount, setAmount] = useState('10.00');
+  const [phone, setPhone] = useState('');
+  const [document, setDocument] = useState('');
   const [transaction, setTransaction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | null>(null);
@@ -27,12 +29,18 @@ export default function PixPaymentModal({
         return;
       }
 
+      if (!phone || !document) {
+        alert('Informe telefone e documento');
+        return;
+      }
+
       setIsLoading(true);
-      const response = await paymentApi.createPix({ amount: value });
+      const response = await paymentApi.createPix({ amount: value, phone, document });
       setTransaction(response);
       checkPaymentStatus(response.transaction_id);
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Erro ao criar pagamento');
+      const data = error.response?.data;
+      alert(data?.detail || data?.error || data?.provider_response?.message || 'Erro ao criar pagamento');
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +124,28 @@ export default function PixPaymentModal({
               onChange={(e) => setAmount(e.target.value)}
               className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
               placeholder="10.00"
+            />
+
+            <label className="block text-sm font-medium text-gray-700 mb-2 mt-4">
+              Telefone
+            </label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
+              placeholder="(11) 99999-9999"
+            />
+
+            <label className="block text-sm font-medium text-gray-700 mb-2 mt-4">
+              Documento (CPF/CNPJ)
+            </label>
+            <input
+              type="text"
+              value={document}
+              onChange={(e) => setDocument(e.target.value)}
+              className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
+              placeholder="123.456.789-00"
             />
           </div>
         )}
