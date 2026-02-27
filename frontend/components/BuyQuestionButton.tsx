@@ -5,31 +5,42 @@ import { useState, useEffect } from 'react';
 import { paymentApi, authApi, User } from '@/lib/api';
 import PixPaymentModal from './PixPaymentModal';
 
-export default function BuyQuestionButton() {
+interface BuyQuestionButtonProps {
+  balance?: number;
+  onBalanceUpdate?: (newBalance: number) => void;
+}
 
-const [balance, setBalance] = useState<number>(0);
+export default function BuyQuestionButton({ balance: externalBalance, onBalanceUpdate }: BuyQuestionButtonProps = {}) {
+
+const [internalBalance, setInternalBalance] = useState<number>(0);
   const [user, setUser] = useState<User | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [pixModal, setPixModal] = useState(false);
   const [amount, setAmount] = useState('10.00');
 
+  // Usar balance externo se fornecido, senão usar interno
+  const balance = externalBalance !== undefined ? externalBalance : internalBalance;
+
   useEffect(() => {
-    loadUser();
-  }, []);
+    // Só carregar se não tiver balance externo
+    if (externalBalance === undefined) {
+      loadUser();
+    }
+  }, [externalBalance]);
 
 
 const loadUser = async () => {
     try {
       const userData = await authApi.getMe();
       setUser(userData);
-      setBalance(userData.balance);
+      setInternalBalance(userData.balance);
     } catch (error) {
       // Usuário não autenticado
       const userStr = localStorage.getItem('user');
       if (userStr) {
         const userData = JSON.parse(userStr);
         setUser(userData);
-        setBalance(userData.balance || 0);
+        setInternalBalance(userData.balance || 0);
       }
     }
   };
@@ -41,7 +52,14 @@ const loadUser = async () => {
 
   const handlePixPaymentSuccess = async (amount: number) => {
     const newBalance = await paymentApi.addCredit(amount);
-    setBalance(newBalance);
+    
+    // Usar callback externo se disponível, senão usar estado interno
+    if (onBalanceUpdate) {
+      onBalanceUpdate(newBalance);
+    } else {
+      setInternalBalance(newBalance);
+    }
+    
     if (user) {
       user.balance = newBalance;
       setUser(user);

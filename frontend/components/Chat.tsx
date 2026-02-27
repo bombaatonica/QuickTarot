@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Message from './Message';
 import BuyQuestionButton from './BuyQuestionButton';
-import { chatApi, TarotResponse } from '@/lib/api';
+import { chatApi, authApi, TarotResponse, User } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -16,7 +16,27 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [balance, setBalance] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Carregar saldo inicial
+  useEffect(() => {
+    loadBalance();
+  }, []);
+
+  const loadBalance = async () => {
+    try {
+      const userData = await authApi.getMe();
+      setBalance(userData.balance);
+    } catch (error) {
+      // Usuário não autenticado
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userData = JSON.parse(userStr);
+        setBalance(userData.balance || 0);
+      }
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -50,6 +70,21 @@ export default function Chat() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Atualizar saldo após pergunta bem-sucedida
+      if (response.balance !== undefined) {
+        setBalance(response.balance);
+        // Atualizar localStorage também
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          userData.balance = response.balance;
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
+      } else {
+        // Se não vier balance na response, carregar do servidor
+        await loadBalance();
+      }
     } catch (error: any) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -74,7 +109,7 @@ export default function Chat() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-3 sm:p-4 flex justify-between items-center">
         <h1 className="text-lg sm:text-xl font-bold text-gray-800">QuickTarot</h1>
-        <BuyQuestionButton />
+        <BuyQuestionButton balance={balance} onBalanceUpdate={setBalance} />
       </div>
 
       {/* Messages */}
