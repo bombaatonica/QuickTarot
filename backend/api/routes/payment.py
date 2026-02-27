@@ -105,7 +105,7 @@ def create_pix(current_user: dict):
             "name": email or "Cliente",
             "email": email,
             "phone": "(99) 99999-9999",
-            "document": "000.000.000-00",
+            "document": "123.456.789-09",
         }
 
         pix_response = oasis_service.receive_pix(
