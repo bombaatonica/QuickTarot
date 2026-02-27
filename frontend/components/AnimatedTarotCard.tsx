@@ -8,9 +8,10 @@ interface AnimatedTarotCardProps {
   card: TarotCard;
   index: number;
   delay: number;
+  onRevealed?: () => void;
 }
 
-export default function AnimatedTarotCard({ card, index, delay }: AnimatedTarotCardProps) {
+export default function AnimatedTarotCard({ card, index, delay, onRevealed }: AnimatedTarotCardProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -25,10 +26,11 @@ export default function AnimatedTarotCard({ card, index, delay }: AnimatedTarotC
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsRevealed(true);
+      onRevealed?.(); // Chamar callback quando a carta for revelada
     }, delay * 1000);
 
     return () => clearTimeout(timer);
-  }, [delay]);
+  }, [delay, onRevealed]);
 
   useEffect(() => {
     if (imageUrl && isRevealed) {
@@ -71,7 +73,7 @@ export default function AnimatedTarotCard({ card, index, delay }: AnimatedTarotC
   }
 
   return (
-    <div className="relative w-full h-48 perspective-1000">
+    <div className="relative w-full h-64 perspective-1000">
       <div
         className={`relative w-full h-full transition-all duration-700 transform-style-preserve-3d ${
           isRevealed ? 'rotate-y-180' : ''
