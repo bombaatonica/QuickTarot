@@ -45,6 +45,8 @@ export interface TarotCard {
   suit?: string;
   meaning: string;
   is_major: boolean;
+  image_url?: string;
+  id?: string;
 }
 
 export interface TarotResponse {
