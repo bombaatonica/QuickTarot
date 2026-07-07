@@ -103,11 +103,14 @@ export const tarotCardsData: TarotCardData[] = [
   { id: 'p14', name: 'King of Pentacles', namePt: 'Rei de Ouros', suit: 'Pentacles', suitPt: 'Ouros', is_major: false, meaning: 'Prosperidade, segurança, mestre do mundo material', image_url: '/tarot-cards/p14.jpg' }
 ];
 
+// Índice por nome (lowercase) construído uma única vez — evita busca linear a cada carta renderizada
+const cardsByNamePt = new Map<string, TarotCardData>(
+  tarotCardsData.map(card => [card.namePt.toLowerCase(), card])
+);
+
 // Função para mapear nome da carta em português para os dados completos
 export function getTarotCardByNamePt(namePt: string): TarotCardData | undefined {
-  return tarotCardsData.find(card => 
-    card.namePt.toLowerCase() === namePt.toLowerCase()
-  );
+  return cardsByNamePt.get(namePt.toLowerCase());
 }
 
 // Função para obter imagem da carta pelo nome em português

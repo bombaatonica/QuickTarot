@@ -96,33 +96,39 @@ export default function PixPaymentModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <h2 className="text-xl font-bold mb-4">Pagar com Pix</h2>
-        
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-bordeaux-900/95 border border-gold-400/30 rounded-2xl shadow-gold-glow p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="font-display text-xl font-bold text-gold-400 mb-4">
+          <span aria-hidden="true" className="mr-2">✦</span>Pagar com Pix
+        </h2>
+
         {transaction ? (
           <>
             <div className="mb-4">
-              <p className="text-gray-600 mb-4 text-center">Pague com Pix e ganhe créditos instantaneamente!</p>
-              
+              <p className="text-gold-100/70 mb-4 text-center text-sm">
+                Pague com Pix e seus créditos entram assim que o pagamento for confirmado.
+              </p>
+
               <div className="mb-4">
-                <img 
+                <img
                   src={transaction.qr_code.startsWith('data:') ? transaction.qr_code : `data:image/png;base64,${transaction.qr_code}`}
-                  alt="QR Code Pix" 
-                  className="mx-auto block w-48 h-48 mb-2 border rounded-lg"
+                  alt="QR Code Pix"
+                  width={192}
+                  height={192}
+                  className="mx-auto block w-48 h-48 mb-2 border-2 border-gold-400/50 rounded-lg bg-white p-1"
                 />
-                <p className="text-sm text-gray-500 text-center mb-4">
+                <p className="text-xs text-gold-100/50 text-center mb-4">
                   Escaneie o QR Code acima para pagar
                 </p>
               </div>
 
               <div className="mb-4">
-                <p className="font-mono text-sm text-gray-700 mb-2">Ou copie o código Pix:</p>
-                <div className="bg-gray-100 p-3 rounded-lg mb-2">
-                  <p className="break-words font-mono text-sm text-gray-900">{transaction.pix_code}</p>
+                <p className="text-sm text-gold-200/80 mb-2">Ou copie o código Pix:</p>
+                <div className="bg-bordeaux-950/80 border border-gold-400/20 p-3 rounded-lg mb-2 max-h-24 overflow-y-auto">
+                  <p className="break-all font-mono text-xs text-gold-100/80">{transaction.pix_code}</p>
                 </div>
-                <button 
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                <button
+                  className="px-4 py-2 bg-transparent border border-gold-400/60 text-gold-300 text-sm rounded-lg hover:bg-gold-400 hover:text-bordeaux-950 transition-all font-medium"
                   onClick={() => {
                     navigator.clipboard.writeText(transaction.pix_code);
                     setCopied(true);
@@ -135,22 +141,29 @@ export default function PixPaymentModal({
             </div>
 
             <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700">Status do pagamento:</p>
-              <div className={`px-3 py-2 rounded-lg text-white text-sm font-medium ${
-                paymentStatus === 'paid' ? 'bg-green-500' :
-                paymentStatus === 'expired' ? 'bg-red-500' :
-                'bg-yellow-500'
-              }`}>
+              <p className="text-sm font-medium text-gold-200/80 mb-1.5">Status do pagamento:</p>
+              <div
+                className={`px-3 py-2 rounded-lg text-sm font-medium border ${
+                  paymentStatus === 'paid'
+                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-400/40'
+                    : paymentStatus === 'expired'
+                      ? 'bg-red-950/60 text-red-300 border-red-400/40'
+                      : 'bg-gold-900/40 text-gold-300 border-gold-400/40'
+                }`}
+              >
                 {paymentStatus === 'paid' && 'Pago ✓'}
-                {paymentStatus === 'pending' && 'Aguardando pagamento...'}
-                {paymentStatus === 'expired' && 'Expirado'}
+                {(paymentStatus === 'pending' || paymentStatus === null) && 'Aguardando pagamento...'}
+                {paymentStatus === 'expired' && 'Expirado — gere uma nova cobrança'}
               </div>
             </div>
           </>
         ) : (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Valor (R$ mínimo R$ 2,00)
+            <p className="text-gold-100/60 text-sm mb-4">
+              Cada consulta custa R$ 1,00. Adicione crédito para consultar o oráculo.
+            </p>
+            <label className="block text-sm font-medium text-gold-200/80 mb-2">
+              Valor (mínimo R$ 2,00)
             </label>
             <input
               type="number"
@@ -158,14 +171,14 @@ export default function PixPaymentModal({
               min="2"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
+              className="w-full px-4 py-2.5 bg-bordeaux-950/70 text-gold-50 border border-gold-400/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400/70 focus:border-gold-400/60 placeholder:text-gold-100/30 transition-colors"
               placeholder="10.00"
             />
           </div>
         )}
 
         {errorMessage && (
-          <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p role="alert" className="mb-4 text-sm text-red-300 bg-red-950/50 border border-red-400/30 rounded-lg px-3 py-2">
             {errorMessage}
           </p>
         )}
@@ -173,21 +186,14 @@ export default function PixPaymentModal({
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex-1 px-4 py-2.5 border border-gold-400/30 text-gold-200/80 rounded-lg hover:bg-bordeaux-800 transition-colors"
           >
-            Cancelar
+            {transaction ? 'Fechar' : 'Cancelar'}
           </button>
-          {transaction ? (
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-            >
-              Fechar
-            </button>
-          ) : (
+          {!transaction && (
             <button
               onClick={createPixPayment}
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="flex-1 px-4 py-2.5 bg-gold-400 text-bordeaux-950 rounded-lg hover:bg-gold-300 hover:shadow-gold-glow disabled:opacity-50 font-display font-semibold tracking-wide transition-all"
               disabled={isLoading}
             >
               {isLoading ? 'Criando...' : 'Pagar com Pix'}

@@ -12,8 +12,12 @@ load_dotenv(dotenv_path=_dotenv_path)
 load_dotenv()
 
 from .routes import auth, payment, chat
+from .db.init import init_database
 
 app = Flask(__name__)
+
+# Cria índices (users.email único, índices de transactions) — falha vira log, não crash
+init_database()
 
 # CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")

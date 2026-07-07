@@ -1,51 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState, useCallback } from 'react';
 import TarotCards from './TarotCards';
 import FormattedTarotText from './FormattedTarotText';
 import { TarotCard } from '@/lib/api';
 
-interface Message {
+interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   cards?: TarotCard[];
+  isError?: boolean;
 }
 
 interface MessageProps {
-  message: Message;
+  message: ChatMessage;
 }
 
-export default function Message({ message }: MessageProps) {
-  const [showInterpretation, setShowInterpretation] = useState(true); // Começa já mostrando
+function Message({ message }: MessageProps) {
   const isUser = message.role === 'user';
+  const hasCards = !isUser && !!message.cards && message.cards.length > 0;
+  // Com cartas: interpretação só aparece depois da revelação das cartas
+  const [showInterpretation, setShowInterpretation] = useState(!hasCards);
 
-  const handleAnimationComplete = () => {
+  const handleAnimationComplete = useCallback(() => {
     setShowInterpretation(true);
-  };
+  }, []);
+
+  const bubbleClasses = isUser
+    ? 'bg-bordeaux-700 text-gold-50 border border-gold-400/20 rounded-2xl rounded-br-sm'
+    : message.isError
+      ? 'bg-red-950/60 text-red-200 border border-red-400/30 rounded-2xl rounded-bl-sm'
+      : 'bg-bordeaux-900/80 text-gold-50 border border-gold-400/20 rounded-2xl rounded-bl-sm shadow-gold-glow';
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-2 sm:px-0`}>
-      <div className={`max-w-full sm:max-w-2xl lg:max-w-3xl ${isUser ? 'bg-purple-600 text-white' : 'bg-white text-gray-900'} rounded-lg p-3 sm:p-4 shadow-sm`}>
-        {!isUser && message.cards && (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-2 sm:px-0 animate-fade-in`}>
+      <div className={`max-w-full sm:max-w-2xl lg:max-w-3xl p-3 sm:p-5 ${bubbleClasses}`}>
+        {hasCards && (
           <div className="mb-4">
-            <TarotCards 
-              cards={message.cards} 
+            <TarotCards
+              cards={message.cards!}
               onAnimationComplete={handleAnimationComplete}
             />
           </div>
         )}
-        {!isUser && message.cards ? (
+        {hasCards ? (
           showInterpretation ? (
-            <div>
-              <FormattedTarotText 
-                text={message.content} 
-                speed={3} // velocidade 3x mais rápida
-              />
-            </div>
+            <FormattedTarotText text={message.content} />
           ) : (
-            <div className="text-gray-400 italic">
-              Aguardando revelação das cartas...
+            <div className="text-gold-200/50 italic text-sm">
+              As cartas estão sendo reveladas...
             </div>
           )
         ) : (
@@ -55,3 +59,5 @@ export default function Message({ message }: MessageProps) {
     </div>
   );
 }
+
+export default memo(Message);

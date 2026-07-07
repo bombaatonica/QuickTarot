@@ -1,152 +1,126 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { TarotCard } from '@/lib/api';
 import { getTarotCardByNamePt } from '@/data/tarot-data';
 
 interface AnimatedTarotCardProps {
   card: TarotCard;
   index: number;
+  /** atraso em ms antes desta carta virar (stagger da tiragem) */
   delay: number;
   onRevealed?: () => void;
 }
 
-export default function AnimatedTarotCard({ card, index, delay, onRevealed }: AnimatedTarotCardProps) {
-  const [isRevealed, setIsRevealed] = useState(true); // Começa já revelada
+const FLIP_DURATION_MS = 700;
+
+function AnimatedTarotCard({ card, index, delay, onRevealed }: AnimatedTarotCardProps) {
+  const [isRevealed, setIsRevealed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  
+  const onRevealedRef = useRef(onRevealed);
+  onRevealedRef.current = onRevealed;
+
   const cardData = getTarotCardByNamePt(card.name);
   const imageUrl = cardData?.image_url || '';
 
+  // Pré-carrega a imagem enquanto a carta ainda está de costas
   useEffect(() => {
-    // Chamar callback imediatamente
-    onRevealed?.();
-  }, [onRevealed]);
-
-  useEffect(() => {
-    console.log(`Card ${index}: isRevealed=${isRevealed}, imageLoaded=${imageLoaded}, imageError=${imageError}`);
-    if (imageUrl && !imageLoaded && !imageError) {
-      console.log(`Card ${index}: Loading image ${imageUrl}`);
-      const img = new Image();
-      img.onload = () => {
-        console.log(`Card ${index}: Image loaded successfully`);
-        setImageLoaded(true);
-      };
-      img.onerror = () => {
-        console.log(`Card ${index}: Image failed to load`);
-        setImageError(true);
-      };
-      img.src = imageUrl;
+    if (!imageUrl) {
+      setImageError(true);
+      return;
     }
-  }, [imageUrl, imageLoaded, imageError]);
+    const img = new Image();
+    img.onload = () => setImageLoaded(true);
+    img.onerror = () => setImageError(true);
+    img.src = imageUrl;
+  }, [imageUrl]);
 
-  if (!cardData) {
-    // Fallback para cards não encontrados
-    return (
-      <div
-        className="bg-gradient-to-br from-purple-100 to-purple-200 border-2 border-purple-300 rounded-lg p-3 text-center animate-fade-in"
-        style={{ animationDelay: `${index * 0.1}s` }}
-      >
-        <div className="font-semibold text-purple-900 text-sm mb-1">
-          {card.name}
-        </div>
-        {card.suit && (
-          <div className="text-xs text-purple-700 mb-1">
-            {card.suit}
-          </div>
-        )}
-        {card.is_major && (
-          <div className="text-xs text-purple-600 font-medium">
-            Arcano Maior
-          </div>
-        )}
+  // Vira a carta após o delay; dispara onRevealed quando o flip termina
+  useEffect(() => {
+    const flipTimer = setTimeout(() => setIsRevealed(true), delay);
+    const doneTimer = setTimeout(() => {
+      onRevealedRef.current?.();
+    }, delay + FLIP_DURATION_MS);
+    return () => {
+      clearTimeout(flipTimer);
+      clearTimeout(doneTimer);
+    };
+  }, [delay]);
+
+  const cardInfoFallback = (
+    <div className="w-full h-full bg-gradient-to-br from-bordeaux-800 to-bordeaux-900 border-2 border-gold-400/50 rounded-lg p-2 flex flex-col items-center justify-center">
+      <div className="text-gold-400 text-lg mb-2" aria-hidden="true">✦</div>
+      <div className="font-display font-semibold text-gold-200 text-xs text-center mb-1">
+        {card.name}
       </div>
-    );
-  }
+      {card.suit && (
+        <div className="text-xs text-gold-100/60 mb-1">{card.suit}</div>
+      )}
+      {card.is_major && (
+        <div className="text-xs text-gold-300/80 font-medium">Arcano Maior</div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="relative w-full h-48 sm:h-56 lg:h-64 perspective-1000">
+    <div className="relative w-full h-48 sm:h-56 lg:h-64 perspective-1000 group">
       <div
-        className={`relative w-full h-full transition-all duration-700 transform-style-preserve-3d ${
+        className={`relative w-full h-full transition-transform duration-700 transform-style-preserve-3d ${
           isRevealed ? 'rotate-y-180' : ''
         }`}
-        style={{
-          animationDelay: `${index * 0.1}s`,
-          transformStyle: 'preserve-3d'
-        }}
+        style={{ transformStyle: 'preserve-3d' }}
       >
-        {/* Verso da carta (parte de trás) */}
-        <div 
+        {/* Verso da carta */}
+        <div
           className="absolute inset-0 w-full h-full backface-hidden rounded-lg overflow-hidden"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <div className="w-full h-full bg-gradient-to-br from-purple-800 to-purple-900 border-2 border-purple-300 rounded-lg flex items-center justify-center">
-            <div className="text-white text-center">
-              <div className="text-2xl mb-1">🌟</div>
-              <div className="text-xs font-medium">Tarot</div>
+          <div className="w-full h-full bg-gradient-to-br from-bordeaux-800 via-bordeaux-900 to-bordeaux-950 border-2 border-gold-400/60 rounded-lg flex items-center justify-center shadow-gold-glow">
+            <div className="text-center border border-gold-400/40 rounded-md px-4 py-6 m-3">
+              <div className="text-gold-400 text-3xl mb-2 animate-shimmer" aria-hidden="true">✦</div>
+              <div className="font-display text-gold-300/90 text-xs tracking-[0.35em] uppercase">Tarot</div>
             </div>
           </div>
         </div>
 
-        {/* Frente da carta (imagem) */}
-        <div 
-          className={`absolute inset-0 w-full h-full backface-hidden rounded-lg overflow-hidden rotate-y-180 ${
-            !imageLoaded && isRevealed ? 'animate-pulse' : ''
-          }`}
-          style={{ 
-            backfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)'
-          }}
+        {/* Frente da carta */}
+        <div
+          className="absolute inset-0 w-full h-full backface-hidden rounded-lg overflow-hidden rotate-y-180 border-2 border-gold-400/60 group-hover:shadow-gold-glow-lg transition-shadow"
+          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
-          {imageError || !imageUrl ? (
-            // Fallback se a imagem não carregar
-            <div className="w-full h-full bg-gradient-to-br from-purple-100 to-purple-200 border-2 border-purple-300 rounded-lg p-2 flex flex-col items-center justify-center">
-              <div className="font-semibold text-purple-900 text-xs text-center mb-1">
-                {card.name}
-              </div>
-              {card.suit && (
-                <div className="text-xs text-purple-700 mb-1">
-                  {card.suit}
-                </div>
-              )}
-              {card.is_major && (
-                <div className="text-xs text-purple-600 font-medium">
-                  Arcano Maior
-                </div>
-              )}
-            </div>
+          {imageError || !imageUrl || !cardData ? (
+            cardInfoFallback
           ) : (
             <>
-              <img 
+              <img
                 src={imageUrl}
                 alt={card.name}
+                width={300}
+                height={527}
+                loading="lazy"
+                decoding="async"
                 className={`w-full h-full object-cover ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImageError(true)}
               />
-              {/* Overlay com informações */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                <div className="text-white text-xs font-medium text-center">
+              {!imageLoaded && (
+                <div className="absolute inset-0 bg-gradient-to-br from-bordeaux-800 to-bordeaux-900 animate-pulse" />
+              )}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
+                <div className="text-gold-200 text-xs font-display font-semibold text-center">
                   {card.name}
                 </div>
                 {card.suit && (
-                  <div className="text-white/80 text-xs text-center">
-                    {card.suit}
-                  </div>
+                  <div className="text-gold-100/70 text-xs text-center">{card.suit}</div>
                 )}
               </div>
             </>
           )}
         </div>
       </div>
-
-      {/* Loading indicator */}
-      {isRevealed && !imageLoaded && !imageError && imageUrl && (
-        <div className="absolute inset-0 flex items-center justify-center bg-purple-900/20 rounded-lg">
-          <div className="text-purple-600 text-xs">Carregando...</div>
-        </div>
-      )}
     </div>
   );
 }
+
+export default memo(AnimatedTarotCard);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TarotCard } from '@/lib/api';
 import AnimatedTarotCard from './AnimatedTarotCard';
 
@@ -9,31 +9,34 @@ interface TarotCardsProps {
   onAnimationComplete?: () => void;
 }
 
-export default function TarotCards({ cards, onAnimationComplete }: TarotCardsProps) {
-  const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
+/** intervalo entre o flip de cada carta */
+const STAGGER_MS = 150;
 
-  const handleCardRevealed = (index: number) => {
-    setRevealedCards(prev => new Set(prev).add(index));
-  };
+export default function TarotCards({ cards, onAnimationComplete }: TarotCardsProps) {
+  const [revealedCount, setRevealedCount] = useState(0);
+
+  const handleCardRevealed = useCallback(() => {
+    setRevealedCount((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
-    if (revealedCards.size === cards.length && cards.length > 0) {
-      // Todas as cartas foram reveladas
-      setTimeout(() => {
+    if (cards.length > 0 && revealedCount >= cards.length) {
+      const timer = setTimeout(() => {
         onAnimationComplete?.();
-      }, 500); // Pequeno delay extra antes de iniciar o texto
+      }, 400); // respiro entre a última carta e o início do texto
+      return () => clearTimeout(timer);
     }
-  }, [revealedCards.size, cards.length, onAnimationComplete]);
+  }, [revealedCount, cards.length, onAnimationComplete]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4 mb-4">
       {cards.map((card, index) => (
         <AnimatedTarotCard
-          key={index}
+          key={`${card.name}-${index}`}
           card={card}
           index={index}
-          delay={0} // Sem delay - todas aparecem de uma vez
-          onRevealed={() => handleCardRevealed(index)}
+          delay={index * STAGGER_MS}
+          onRevealed={handleCardRevealed}
         />
       ))}
     </div>

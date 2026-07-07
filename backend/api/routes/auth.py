@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import os
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 from ..models.user import UserCreate, UserLogin
 from ..db.mongodb import get_database
 
@@ -124,7 +125,11 @@ def register():
         "created_at": datetime.utcnow()
     }
 
-    result = users_collection.insert_one(user_doc)
+    try:
+        result = users_collection.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Índice único de email pega a corrida entre o find_one acima e o insert
+        abort(400, description="Email já cadastrado")
     user_id = str(result.inserted_id)
 
     # Gera token

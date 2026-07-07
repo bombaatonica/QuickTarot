@@ -1,84 +1,97 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 interface FormattedTarotTextProps {
   text: string;
+  /** ms entre cada tick do typewriter */
   speed?: number;
+  /** caracteres revelados por tick (reduz re-renders) */
+  charsPerTick?: number;
   onComplete?: () => void;
   className?: string;
 }
 
-export default function FormattedTarotText({ 
-  text, 
-  speed = 3,
+// Escapa HTML antes de qualquer processamento — o texto vem do LLM
+// (que ecoa a pergunta do usuário) e é renderizado via dangerouslySetInnerHTML.
+const escapeHtml = (raw: string) =>
+  raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const processMarkdown = (rawText: string) => {
+  const safeText = escapeHtml(rawText);
+
+  // Headers **Título** em linha própria → <h3>
+  let processed = safeText.replace(/^\*\*(.*?)\*\*\s*$/gm,
+    '<h3 class="font-display text-base sm:text-lg font-bold text-gold-400 mb-2 sm:mb-3 mt-3 sm:mt-4">$1</h3>');
+
+  // Itens numerados "1. **Carta**: texto"
+  processed = processed.replace(/(\d+)\.\s*\*\*([\s\S]*?)\*\*:\s*([\s\S]*?)(?=\n\d+\.|\n\n|\n\*\*|$)/g,
+    '<div class="mb-2 sm:mb-3"><span class="font-semibold text-gold-300">$1.</span> <strong class="font-bold text-gold-300">$2</strong>: <span class="text-gold-50/90">$3</span></div>');
+
+  // Negrito restante
+  processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gold-300">$1</strong>');
+
+  // Bullet points
+  processed = processed.replace(/•\s*([\s\S]*?)(?=\n•|\n\n|$)/g,
+    '<li class="text-gold-50/90 ml-4 mb-1 list-none">• $1</li>');
+
+  // Parágrafos
+  processed = processed.replace(/\n\n/g, '</p><p class="mb-2 sm:mb-3 text-gold-50/90">');
+  processed = `<p class="mb-2 sm:mb-3 text-gold-50/90">${processed}</p>`;
+
+  return processed;
+};
+
+export default function FormattedTarotText({
+  text,
+  speed = 12,
+  charsPerTick = 4,
   onComplete,
-  className = ''
+  className = '',
 }: FormattedTarotTextProps) {
-  const [displayedText, setDisplayedText] = useState('');
-  const [isComplete, setIsComplete] = useState(false);
+  const [visibleChars, setVisibleChars] = useState(0);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  // Escapa HTML antes de qualquer processamento — o texto vem do LLM
-  // (que ecoa a pergunta do usuário) e é renderizado via dangerouslySetInnerHTML.
-  const escapeHtml = (raw: string) =>
-    raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  // Função para processar markdown simples
-  const processMarkdown = (rawText: string) => {
-    const safeText = escapeHtml(rawText);
-    // Processar **negrito** → <strong>
-    let processed = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-purple-700">$1</strong>');
-    
-    // Processar headers → <h3>
-    processed = processed.replace(/\*\*(.*?)\*\*\n/g, '<h3 class="tarot-header text-base sm:text-lg font-bold text-purple-600 mb-2 sm:mb-3 mt-3 sm:mt-4">$1</h3>');
-    
-    // Processar itens numerados → <div class="tarot-card-item">
-    processed = processed.replace(/(\d+)\.\s*\*\*(.*?)\*\*:\s*(.*?)(?=\n\d+\.|\n\n|\n\*\*|$)/g, 
-      '<div class="tarot-card-item mb-2 sm:mb-3"><span class="font-semibold text-purple-600 text-sm sm:text-base">$1.</span> <strong class="font-bold text-purple-700 text-sm sm:text-base">$2</strong>: <span class="text-gray-700 text-sm sm:text-base">$3</span></div>');
-    
-    // Processar bullet points → <li>
-    processed = processed.replace(/•\s*(.*?)(?=\n•|\n\n|$)/g, 
-      '<li class="tarot-insight-item text-gray-700 ml-4 mb-1 text-sm sm:text-base">• $1</li>');
-    
-    // Processar parágrafos normais
-    processed = processed.replace(/\n\n/g, '</p><p class="mb-2 sm:mb-3 text-gray-700 text-sm sm:text-base">');
-    processed = `<p class="mb-2 sm:mb-3 text-gray-700 text-sm sm:text-base">${processed}</p>`;
-    
-    return processed;
-  };
+  const isComplete = visibleChars >= text.length;
 
   useEffect(() => {
-    let currentIndex = 0;
-    let timeout: NodeJS.Timeout;
+    setVisibleChars(0);
+    if (!text) return;
 
-    const typeNextChar = () => {
-      if (currentIndex < text.length) {
-        setDisplayedText(text.slice(0, currentIndex + 1));
-        currentIndex++;
-        timeout = setTimeout(typeNextChar, speed);
-      } else {
-        setIsComplete(true);
-        onComplete?.();
-      }
-    };
+    // Usuários com preferência por menos movimento veem o texto direto
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      setVisibleChars(text.length);
+      onCompleteRef.current?.();
+      return;
+    }
 
-    // Reset quando o texto mudar
-    setDisplayedText('');
-    setIsComplete(false);
-    currentIndex = 0;
-    
-    // Começar a digitação
-    timeout = setTimeout(typeNextChar, 100);
+    const interval = setInterval(() => {
+      setVisibleChars((prev) => {
+        const next = Math.min(prev + charsPerTick, text.length);
+        if (next >= text.length) {
+          clearInterval(interval);
+          onCompleteRef.current?.();
+        }
+        return next;
+      });
+    }, speed);
 
-    return () => clearTimeout(timeout);
-  }, [text, speed, onComplete]);
+    return () => clearInterval(interval);
+  }, [text, speed, charsPerTick]);
 
-  const processedText = processMarkdown(displayedText);
+  const processedText = useMemo(
+    () => processMarkdown(text.slice(0, visibleChars)),
+    [text, visibleChars]
+  );
 
   return (
-    <div 
-      className={`prose prose-sm max-w-none ${className}`}
-      dangerouslySetInnerHTML={{ __html: processedText }}
-    />
+    <div className={`max-w-none leading-relaxed ${className}`}>
+      <div dangerouslySetInnerHTML={{ __html: processedText }} />
+      {!isComplete && <span className="typewriter-cursor" aria-hidden="true" />}
+    </div>
   );
 }
