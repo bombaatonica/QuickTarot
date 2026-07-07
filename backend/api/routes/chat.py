@@ -26,9 +26,9 @@ def ask_tarot_question(current_user: dict):
     
     user_id = current_user["user_id"]
     
-    # Verifica e deduz saldo
+    # Verifica e deduz saldo (402 não tem exception no werkzeug; retorna JSON direto)
     if not deduct_balance(user_id, QUESTION_PRICE):
-        abort(402, description=f"Saldo insuficiente. Cada pergunta custa R$ {QUESTION_PRICE:.2f}")
+        return jsonify({"detail": f"Saldo insuficiente. Cada pergunta custa R$ {QUESTION_PRICE:.2f}"}), 402
     
     # Sorteia 9 cartas
     cards = draw_cards(count=9)
