@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { paymentApi } from '@/lib/api';
 
 interface PixPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPaymentSuccess: (amount: number) => void;
+  onPaymentSuccess: () => void;
 }
+
+const POLL_INTERVAL_MS = 5000;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min: para de consultar e marca como expirado
 
 export default function PixPaymentModal({
   isOpen,
@@ -19,46 +22,75 @@ export default function PixPaymentModal({
   const [isLoading, setIsLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  // Limpa polling ao desmontar ou fechar o modal
+  useEffect(() => {
+    if (!isOpen) {
+      stopPolling();
+      setTransaction(null);
+      setPaymentStatus(null);
+      setErrorMessage(null);
+      setCopied(false);
+    }
+    return stopPolling;
+  }, [isOpen, stopPolling]);
 
   const createPixPayment = async () => {
-    try {
-      const value = parseFloat(amount);
-      if (isNaN(value) || value < 2.0) {
-        alert('Valor mínimo é R$ 2,00');
-        return;
-      }
+    const value = parseFloat(amount);
+    if (isNaN(value) || value < 2.0) {
+      setErrorMessage('Valor mínimo é R$ 2,00');
+      return;
+    }
 
+    try {
+      setErrorMessage(null);
       setIsLoading(true);
       const response = await paymentApi.createPix({ amount: value });
       setTransaction(response);
-      checkPaymentStatus(response.transaction_id);
+      setPaymentStatus('pending');
+      startPolling(response.transaction_id);
     } catch (error: any) {
       const data = error.response?.data;
-      alert(data?.detail || data?.error || data?.provider_response?.message || 'Erro ao criar pagamento');
+      setErrorMessage(data?.detail || data?.error || data?.provider_response?.message || 'Erro ao criar pagamento');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const checkPaymentStatus = async (transactionId: string) => {
-    const interval = setInterval(async () => {
+  const startPolling = (transactionId: string) => {
+    stopPolling();
+    const startedAt = Date.now();
+
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        stopPolling();
+        setPaymentStatus('expired');
+        return;
+      }
       try {
         const response = await paymentApi.checkStatus(transactionId);
         setPaymentStatus(response.status);
 
         if (response.status === 'paid') {
-          clearInterval(interval);
-          onPaymentSuccess(response.amount);
+          stopPolling();
+          onPaymentSuccess();
           onClose();
         } else if (response.status === 'expired') {
-          clearInterval(interval);
-          alert('Pagamento expirado');
-          onClose();
+          stopPolling();
         }
-      } catch (error) {
-        console.error('Erro ao verificar status:', error);
+      } catch {
+        // Erro transitório de rede: tenta de novo no próximo tick
       }
-    }, 5000); // Verificar a cada 5 segundos
+    }, POLL_INTERVAL_MS);
   };
 
   if (!isOpen) return null;
@@ -130,6 +162,12 @@ export default function PixPaymentModal({
               placeholder="10.00"
             />
           </div>
+        )}
+
+        {errorMessage && (
+          <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {errorMessage}
+          </p>
         )}
 
         <div className="flex gap-2">

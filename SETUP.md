@@ -44,7 +44,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 
 5. Execute o servidor:
 ```bash
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+python -m flask --app api.main:app run --port 8000 --debug
 ```
 
 ## Setup Frontend

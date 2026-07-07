@@ -26,7 +26,7 @@ QuickTarot/
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn api.main:app --reload
+python -m flask --app api.main:app run --port 8000 --debug
 ```
 
 ### Frontend

@@ -11,6 +11,8 @@ export default function Home() {
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [registerData, setRegisterData] = useState({ email: '', password: '', name: '' });
   const [isRegister, setIsRegister] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -34,23 +36,31 @@ export default function Home() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
+    setIsSubmitting(true);
     try {
       await authApi.login(loginData);
       setIsAuthenticated(true);
       setShowLogin(false);
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Erro ao fazer login');
+      setAuthError(error.response?.data?.detail || 'Erro ao fazer login');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
+    setIsSubmitting(true);
     try {
       await authApi.register(registerData);
       setIsAuthenticated(true);
       setShowLogin(false);
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Erro ao registrar');
+      setAuthError(error.response?.data?.detail || 'Erro ao registrar');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

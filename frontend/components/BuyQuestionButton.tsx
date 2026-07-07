@@ -98,7 +98,7 @@ return (
                 type="number"
                 step="0.01"
                 min="2"
-                value="10.00"
+                value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400"
                 placeholder="10.00"
