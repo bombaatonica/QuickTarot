@@ -115,7 +115,9 @@ export default function Chat() {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {/* mesma largura do input para a coluna ficar alinhada */}
+        <div className="w-full max-w-3xl mx-auto space-y-3 sm:space-y-4">
         {messages.length === 0 && (
           <div className="text-center mt-12 sm:mt-24 animate-fade-in px-4">
             <div className="text-gold-400/70 text-2xl mb-4 tracking-[0.6em]" aria-hidden="true">✦ ✦ ✦</div>
@@ -146,7 +148,8 @@ export default function Chat() {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Input */}

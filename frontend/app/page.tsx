@@ -93,8 +93,9 @@ export default function Home() {
             <>
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gold-200/80 mb-1.5">Email</label>
+                  <label htmlFor="login-email" className="block text-sm font-medium text-gold-200/80 mb-1.5">Email</label>
                   <input
+                    id="login-email"
                     type="email"
                     value={loginData.email}
                     onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
@@ -103,8 +104,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gold-200/80 mb-1.5">Senha</label>
+                  <label htmlFor="login-password" className="block text-sm font-medium text-gold-200/80 mb-1.5">Senha</label>
                   <input
+                    id="login-password"
                     type="password"
                     value={loginData.password}
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
@@ -139,8 +141,9 @@ export default function Home() {
             <>
               <form onSubmit={handleRegister} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gold-200/80 mb-1.5">Nome (opcional)</label>
+                  <label htmlFor="register-name" className="block text-sm font-medium text-gold-200/80 mb-1.5">Nome (opcional)</label>
                   <input
+                    id="register-name"
                     type="text"
                     value={registerData.name}
                     onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
@@ -148,8 +151,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gold-200/80 mb-1.5">Email</label>
+                  <label htmlFor="register-email" className="block text-sm font-medium text-gold-200/80 mb-1.5">Email</label>
                   <input
+                    id="register-email"
                     type="email"
                     value={registerData.email}
                     onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
@@ -158,8 +162,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gold-200/80 mb-1.5">Senha (mínimo 8 caracteres)</label>
+                  <label htmlFor="register-password" className="block text-sm font-medium text-gold-200/80 mb-1.5">Senha (mínimo 8 caracteres)</label>
                   <input
+                    id="register-password"
                     type="password"
                     value={registerData.password}
                     onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}

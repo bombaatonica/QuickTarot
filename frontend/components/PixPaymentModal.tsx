@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { paymentApi } from '@/lib/api';
 
 interface PixPaymentModalProps {
@@ -95,7 +96,10 @@ export default function PixPaymentModal({
 
   if (!isOpen) return null;
 
-  return (
+  // Portal: o modal é renderizado dentro do header (que tem backdrop-blur e
+  // vira containing block/stacking context) — sem portal ele ficaria por
+  // baixo do conteúdo da página.
+  return createPortal(
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-bordeaux-900/95 border border-gold-400/30 rounded-2xl shadow-gold-glow p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <h2 className="font-display text-xl font-bold text-gold-400 mb-4">
@@ -162,10 +166,11 @@ export default function PixPaymentModal({
             <p className="text-gold-100/60 text-sm mb-4">
               Cada consulta custa R$ 1,00. Adicione crédito para consultar o oráculo.
             </p>
-            <label className="block text-sm font-medium text-gold-200/80 mb-2">
+            <label htmlFor="pix-amount" className="block text-sm font-medium text-gold-200/80 mb-2">
               Valor (mínimo R$ 2,00)
             </label>
             <input
+              id="pix-amount"
               type="number"
               step="0.01"
               min="2"
@@ -201,6 +206,7 @@ export default function PixPaymentModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

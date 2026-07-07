@@ -29,7 +29,7 @@ export default function TarotCards({ cards, onAnimationComplete }: TarotCardsPro
   }, [revealedCount, cards.length, onAnimationComplete]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4 mb-4">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4 mb-4">
       {cards.map((card, index) => (
         <AnimatedTarotCard
           key={`${card.name}-${index}`}

@@ -64,7 +64,7 @@ function AnimatedTarotCard({ card, index, delay, onRevealed }: AnimatedTarotCard
   );
 
   return (
-    <div className="relative w-full h-48 sm:h-56 lg:h-64 perspective-1000 group">
+    <div className="relative w-full aspect-[3/5] perspective-1000 group">
       <div
         className={`relative w-full h-full transition-transform duration-700 transform-style-preserve-3d ${
           isRevealed ? 'rotate-y-180' : ''

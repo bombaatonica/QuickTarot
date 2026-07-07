@@ -42,3 +42,8 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/e2e/screenshots/
