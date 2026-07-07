@@ -43,6 +43,16 @@ def update_transaction(transaction_id: str, update_data: dict):
 def update_transaction_status(transaction_id: str, status: str):
     return update_transaction(transaction_id, {"status": status, "updated_at": datetime.utcnow()})
 
+def update_transaction_status_if_pending(transaction_id: str, status: str) -> bool:
+    """Transição atômica pending -> status. Retorna True apenas para quem 'ganhou'
+    a transição, garantindo que webhooks duplicados não processem duas vezes."""
+    collection = get_transactions_collection()
+    result = collection.update_one(
+        {"_id": ObjectId(transaction_id), "status": "pending"},
+        {"$set": {"status": status, "updated_at": datetime.utcnow()}}
+    )
+    return result.modified_count == 1
+
 def get_user_transactions(user_id: str):
     collection = get_transactions_collection()
     return list(collection.find({"user_id": user_id}).sort("created_at", -1))

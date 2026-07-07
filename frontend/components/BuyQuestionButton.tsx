@@ -50,20 +50,20 @@ const loadUser = async () => {
     setPixModal(true);
   };
 
-  const handlePixPaymentSuccess = async (amount: number) => {
-    const newBalance = await paymentApi.addCredit(amount);
-    
-    // Usar callback externo se disponível, senão usar estado interno
-    if (onBalanceUpdate) {
-      onBalanceUpdate(newBalance);
-    } else {
-      setInternalBalance(newBalance);
-    }
-    
-    if (user) {
-      user.balance = newBalance;
-      setUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
+  const handlePixPaymentSuccess = async () => {
+    // O webhook do gateway já creditou o saldo no servidor;
+    // aqui apenas recarregamos o valor atualizado.
+    try {
+      const userData = await authApi.getMe();
+      if (onBalanceUpdate) {
+        onBalanceUpdate(userData.balance);
+      } else {
+        setInternalBalance(userData.balance);
+      }
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } catch {
+      // Saldo será atualizado na próxima interação
     }
   };
 

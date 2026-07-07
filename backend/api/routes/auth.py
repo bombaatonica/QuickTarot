@@ -2,17 +2,28 @@
 from flask import Blueprint, request, jsonify, abort
 from functools import wraps
 import bcrypt
+import logging
+import secrets
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
 from bson import ObjectId
+from bson.errors import InvalidId
 from ..models.user import UserCreate, UserLogin
 from ..db.mongodb import get_database
 
 
 bp = Blueprint('auth', __name__)
 
-SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    # Sem segredo configurado: gera um efêmero por processo em vez de usar um
+    # valor hardcoded conhecido. Tokens deixam de valer a cada restart.
+    SECRET_KEY = secrets.token_hex(32)
+    logging.getLogger(__name__).warning(
+        "JWT_SECRET não definido no ambiente; usando segredo efêmero. "
+        "Defina JWT_SECRET no backend/.env para sessões persistentes."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 dias
 
@@ -66,7 +77,7 @@ def get_current_user():
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
-        if user_id is None:
+        if user_id is None or not ObjectId.is_valid(user_id):
             abort(401, description="Token inválido")
         return {"user_id": user_id}
     except JWTError:
@@ -90,8 +101,8 @@ def register():
     
     try:
         user_data = UserCreate(**data)
-    except Exception as e:
-        abort(400, description=f"Dados inválidos: {str(e)}")
+    except Exception:
+        abort(400, description="Dados inválidos: verifique o email e use uma senha com no mínimo 8 caracteres")
     
     db = get_database()
     users_collection = db.users
@@ -139,8 +150,8 @@ def login():
     
     try:
         login_data = UserLogin(**data)
-    except Exception as e:
-        abort(400, description=f"Dados inválidos: {str(e)}")
+    except Exception:
+        abort(400, description="Dados inválidos: informe email e senha")
     
     db = get_database()
     users_collection = db.users

@@ -8,12 +8,14 @@ from ..db.transactions import (
     create_transaction,
     get_transaction,
     update_transaction_status,
+    update_transaction_status_if_pending,
     get_transaction_by_charge_id,
     get_transaction_by_identifier
 )
 import os
 import uuid
 import requests
+from werkzeug.exceptions import HTTPException
 
 bp = Blueprint('payment', __name__)
 
@@ -42,7 +44,14 @@ def get_balance(current_user: dict):
 @bp.route("/add-credit", methods=["POST"])
 @require_auth
 def add_credit(current_user: dict):
-    """Adiciona crédito ao saldo do usuário (simulado para MVP)"""
+    """Adiciona crédito ao saldo do usuário (apenas ambiente de teste).
+
+    Bloqueado por padrão: sem essa trava, qualquer usuário autenticado
+    poderia se dar crédito ilimitado sem pagar.
+    """
+    if os.getenv("ALLOW_TEST_CREDIT", "").lower() != "true":
+        abort(403, description="Crédito manual desabilitado. Use o pagamento via Pix.")
+
     data = request.get_json()
     if not data or "amount" not in data:
         abort(400, description="Dados inválidos: 'amount' é obrigatório")
@@ -102,8 +111,9 @@ def create_pix(current_user: dict):
         email = (user_doc or {}).get("email")
 
         client = {
-            "name": email or "Cliente",
+            "name": (user_doc or {}).get("name") or email or "Cliente",
             "email": email,
+            # Gateway exige phone/document; app não coleta esses dados no cadastro.
             "phone": "(99) 99999-9999",
             "document": "123.456.789-09",
         }
@@ -163,8 +173,10 @@ def create_pix(current_user: dict):
             "success": False,
             "error": "Falha de comunicação com o provedor de pagamento",
         }), 502
-    except Exception as e:
-        abort(500, description=f"Erro ao criar cobrança: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        abort(500, description="Erro ao criar cobrança Pix")
 
 
 @bp.route("/check-status/<transaction_id>", methods=["GET"])
@@ -205,49 +217,41 @@ def webhook():
     if data["event"] == "TRANSACTION_PAID":
         transaction_obj = data.get("transaction") or {}
         identifier = transaction_obj.get("identifier")
-        amount = transaction_obj.get("amount")
 
         if not identifier:
             return jsonify({"error": "Identifier ausente"}), 400
 
-        try:
-            amount_value = float(amount)
-        except (TypeError, ValueError):
-            return jsonify({"error": "Valor inválido"}), 400
-
         transaction = get_transaction_by_identifier(identifier)
         if transaction and transaction.get("status") == "pending":
-            db = get_database()
-            users_collection = db.users
-            users_collection.update_one(
-                {"_id": ObjectId(transaction["user_id"])},
-                {"$inc": {"balance": amount_value}}
-            )
-            update_transaction_status(str(transaction["_id"]), "paid")
+            # Credita o valor registrado na criação da cobrança, nunca o valor
+            # vindo do payload do webhook (payload é input externo não confiável).
+            amount_value = float(transaction["amount"])
+
+            # Marca como paga primeiro (transição atômica pending->paid) para
+            # que webhooks duplicados não creditem duas vezes.
+            claimed = update_transaction_status_if_pending(str(transaction["_id"]), "paid")
+            if claimed:
+                db = get_database()
+                users_collection = db.users
+                users_collection.update_one(
+                    {"_id": ObjectId(transaction["user_id"])},
+                    {"$inc": {"balance": amount_value}}
+                )
 
     return jsonify({"status": "ok"}), 200
 
 
 def deduct_balance(user_id: str, amount: float) -> bool:
-    """Deduz saldo do usuário. Retorna True se teve saldo suficiente, False caso contrário"""
+    """Deduz saldo do usuário. Retorna True se teve saldo suficiente, False caso contrário.
+
+    Operação atômica (filtro + $inc em um único comando) para impedir que duas
+    requisições concorrentes gastem o mesmo saldo.
+    """
     db = get_database()
     users_collection = db.users
 
-    user_obj_id = ObjectId(user_id)
-    user_doc = users_collection.find_one({"_id": user_obj_id})
-
-    if not user_doc:
-        return False
-
-    current_balance = user_doc.get("balance", 0.0)
-
-    if current_balance < amount:
-        return False
-
-    new_balance = current_balance - amount
-    users_collection.update_one(
-        {"_id": user_obj_id},
-        {"$set": {"balance": new_balance}}
+    result = users_collection.find_one_and_update(
+        {"_id": ObjectId(user_id), "balance": {"$gte": amount}},
+        {"$inc": {"balance": -amount}}
     )
-
-    return True
+    return result is not None

@@ -18,10 +18,16 @@ export default function FormattedTarotText({
   const [displayedText, setDisplayedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
 
+  // Escapa HTML antes de qualquer processamento — o texto vem do LLM
+  // (que ecoa a pergunta do usuário) e é renderizado via dangerouslySetInnerHTML.
+  const escapeHtml = (raw: string) =>
+    raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   // Função para processar markdown simples
-  const processMarkdown = (text: string) => {
+  const processMarkdown = (rawText: string) => {
+    const safeText = escapeHtml(rawText);
     // Processar **negrito** → <strong>
-    let processed = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-purple-700">$1</strong>');
+    let processed = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-purple-700">$1</strong>');
     
     // Processar headers → <h3>
     processed = processed.replace(/\*\*(.*?)\*\*\n/g, '<h3 class="tarot-header text-base sm:text-lg font-bold text-purple-600 mb-2 sm:mb-3 mt-3 sm:mt-4">$1</h3>');
