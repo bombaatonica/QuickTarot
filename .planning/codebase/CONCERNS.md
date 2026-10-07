@@ -1,580 +1,69 @@
-# Codebase Concerns
-
-**Analysis Date:** 2026-07-07
-
-## Security Issues
-
-### JWT Secret Hardcoded Fallback
-
-**Risk:** Production application runs with hardcoded default secret key if JWT_SECRET environment variable is not set.
-
-**Files:** `backend/api/routes/auth.py:15`
-
-**Current state:**
-```python
-SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
-```
-
-**Impact:**
-- Any attacker who knows the default key can forge valid JWT tokens
-- Affects all authentication across the entire system
-- Token verification in `verify_password()` and `get_current_user()` would accept forged tokens
-
-**Fix approach:**
-- Remove the fallback default value
-- Raise an error on startup if JWT_SECRET is not set
-- Document required environment variables with validation
-
----
-
-### XSS Vulnerability in Tarot Text Rendering
-
-**Risk:** User-controlled content from LLM can inject arbitrary HTML/JavaScript via dangerouslySetInnerHTML.
-
-**Files:** `frontend/components/FormattedTarotText.tsx:75`
-
-**Current state:**
-```tsx
-const processMarkdown = (text: string) => {
-  let processed = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-purple-700">$1</strong>');
-  // ... more regex replacements
-  return processed;
-};
-
-return (
-  <div 
-    dangerouslySetInnerHTML={{ __html: processedText }}
-  />
-);
-```
-
-**Impact:**
-- If the Groq LLM response contains `<img src=x onerror="malicious()">`, it will execute
-- Attacker could steal session tokens from localStorage
-- Could redirect users to phishing sites
-- Could deface content displayed to users
-
-**Trigger:** Any prompt that causes Groq to generate HTML-like content (including intentional injections)
-
-**Fix approach:**
-- Use a sanitization library (e.g., `DOMPurify` or `sanitize-html`)
-- Parse markdown properly with a library like `remark` + sanitize output
-- Or: use DOM manipulation instead of innerHTML (create elements, set textContent, use `.appendChild()`)
-
----
-
-### Webhook Amount Validation Missing
-
-**Risk:** Webhook endpoint trusts the amount sent by OasisPay without verifying it matches the stored transaction.
-
-**Files:** `backend/api/routes/payment.py:205-226`
-
-**Current state:**
-```python
-@bp.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    # ... token validation ...
-    
-    if data["event"] == "TRANSACTION_PAID":
-        transaction_obj = data.get("transaction") or {}
-        identifier = transaction_obj.get("identifier")
-        amount = transaction_obj.get("amount")  # Trusts this value
-        
-        transaction = get_transaction_by_identifier(identifier)
-        if transaction and transaction.get("status") == "pending":
-            # Uses amount from webhook, not from stored transaction
-            users_collection.update_one(
-                {"_id": ObjectId(transaction["user_id"])},
-                {"$inc": {"balance": amount_value}}  # Could be inflated
-            )
-```
-
-**Impact:**
-- Attacker who intercepts webhook could change amount from 10.00 to 1000.00
-- User gets credited with incorrect amount
-- Direct revenue loss for the platform
-
-**Fix approach:**
-- Extract amount from `transaction` table, not from webhook payload
-- Compare webhook amount with stored transaction amount
-- Log discrepancies
-- Reject webhook if amounts don't match
-
----
-
-### Unauthenticated Credit Addition
-
-**Risk:** `/api/payment/add-credit` endpoint allows any authenticated user to add unlimited free credit with no server-side validation against request amount.
-
-**Files:** `backend/api/routes/payment.py:42-74`
-
-**Current state:**
-```python
-@bp.route("/add-credit", methods=["POST"])
-@require_auth
-def add_credit(current_user: dict):
-    data = request.get_json()
-    amount = float(data["amount"])  # Takes whatever client sends
-    
-    # No validation that this is legitimate or authorized
-    users_collection.update_one(
-        {"_id": user_id},
-        {"$set": {"balance": new_balance}}
-    )
-    return jsonify({"balance": new_balance, "added": amount})
-```
-
-**Impact:**
-- User can modify network request to add arbitrary credit (e.g., "amount": 999999.00)
-- Endpoint is probably intended for legitimate payment webhook processing only
-- Can be exploited to bypass payment entirely
-
-**Fix approach:**
-- Remove this endpoint if it's only for testing
-- If needed, restrict to admin-only with additional auth
-- Make it webhook-only (require valid webhook token)
-- Or: remove client-side ability to call this directly
-
----
-
-## Race Conditions
-
-### Non-Atomic Balance Deduction
-
-**Risk:** `deduct_balance()` performs a read-check-write sequence that's not atomic. Multiple concurrent requests can bypass balance checks.
-
-**Files:** `backend/api/routes/payment.py:231-253`
-
-**Scenario:**
-1. User has balance = 2.00
-2. Request A calls `deduct_balance(user_id, 1.00)` → reads balance (2.00)
-3. Request B calls `deduct_balance(user_id, 1.00)` → reads balance (2.00)
-4. Request A writes balance = 1.00
-5. Request B writes balance = 1.00
-6. Both succeed, but user lost 2.00 instead of 1.00 being deducted twice
-
-**Impact:**
-- Questions can be asked even with insufficient balance
-- Balance can go negative
-- Revenue bypass
-
-**Files affected:**
-- `backend/api/routes/chat.py:30` - calls `deduct_balance()` to charge for questions
-- `backend/api/routes/payment.py:231-253` - the vulnerable function
-
-**Fix approach:**
-- Use MongoDB atomic update with `$inc` and conditional check: `updateOne(..., {"$inc": {"balance": -amount}}, {upsert: false})`
-- Or: use MongoDB transactions if supporting multiple documents
-- Or: add database-level unique constraint/index to prevent double-spending
-
----
-
-## Frontend Issues
-
-### Double-Credit After Pix Payment
-
-**Risk:** After successful Pix payment, frontend calls `addCredit()` again, but webhook already credited the user (double-charging).
-
-**Files:** 
-- `frontend/components/BuyQuestionButton.tsx:53-68`
-- `frontend/components/PixPaymentModal.tsx:44-62`
-
-**Flow:**
-1. User makes Pix payment
-2. Webhook (backend) credits user (correct)
-3. `checkPaymentStatus()` detects paid status
-4. Calls `onPaymentSuccess(response.amount)` 
-5. `handlePixPaymentSuccess()` calls `paymentApi.addCredit(amount)` again
-6. User now has double the credit
-
-**Impact:**
-- User gets credited twice for one payment
-- Every payment costs 50% less for users
-- Direct revenue impact
-
-**Fix approach:**
-- Remove the client-side `addCredit()` call after webhook success
-- Rely entirely on webhook for crediting
-- Or: have client-side poll for confirmed balance instead of calling addCredit
-
----
-
-### Hardcoded Amount Input Value
-
-**Risk:** Input field has static value that doesn't update with user input.
-
-**Files:** `frontend/components/BuyQuestionButton.tsx:101`
-
-**Current state:**
-```tsx
-<input
-  type="number"
-  value="10.00"  // Always "10.00"
-  onChange={(e) => setAmount(e.target.value)}  // Updates state but not displayed
-  placeholder="10.00"
-/>
-```
-
-**Impact:**
-- User can't change the amount they want to add
-- Appears to accept input (onChange fires) but displays wrong value
-- Confusing UX, users might send payment for wrong amount
-
-**Fix approach:**
-- Change to: `value={amount}` (use state value, not hardcoded)
-
----
-
-### Memory Leak in Payment Modal
-
-**Risk:** `setInterval` in `checkPaymentStatus()` is never cleaned up, especially on unmount or cancellation.
-
-**Files:** `frontend/components/PixPaymentModal.tsx:43-62`
-
-**Current state:**
-```tsx
-const checkPaymentStatus = async (transactionId: string) => {
-  const interval = setInterval(async () => {
-    // ... polling logic ...
-    if (response.status === 'paid') {
-      clearInterval(interval);
-    } else if (response.status === 'expired') {
-      clearInterval(interval);
-    }
-    // If component unmounts before paid/expired, interval keeps running
-  }, 5000);
-  // interval is not stored in state/ref, so can't clean up on unmount
-};
-```
-
-**Impact:**
-- Every time user opens modal, new interval created
-- If user cancels without payment completing, interval runs forever
-- Over time: many intervals polling backend continuously
-- Increases backend load, drains battery on mobile
-
-**Example:** User opens 10 modals and cancels 10 times = 10 orphaned intervals polling every 5 seconds
-
-**Fix approach:**
-- Store interval ID in `useRef`
-- Use `useEffect()` with cleanup function to clear interval on unmount
-- Implement: `useEffect(() => { return () => clearInterval(interval); }, [])`
-
----
-
-### Dead Card-Flip Animation
-
-**Risk:** Card reveal animation never triggers because `isRevealed` starts as `true`.
-
-**Files:** `frontend/components/AnimatedTarotCard.tsx:15`
-
-**Current state:**
-```tsx
-const [isRevealed, setIsRevealed] = useState(true); // Starts revealed
-```
-
-**Comment in code:** "Começa já revelada" (Starts already revealed)
-
-**Impact:**
-- Cards display immediately without flip effect
-- Intended animation sequence never plays
-- Reduces visual impact/polish
-
-**Fix approach:**
-- Change to: `useState(false)` to start with back of card
-- Add `useEffect()` that flips card after delay (e.g., after index * delay ms)
-
----
-
-### Excessive Console Logging
-
-**Risk:** Console spam in production from card rendering component.
-
-**Files:** `frontend/components/AnimatedTarotCard.tsx:28, 30, 33, 37`
-
-**Current state:**
-```tsx
-useEffect(() => {
-  console.log(`Card ${index}: isRevealed=${isRevealed}, imageLoaded=${imageLoaded}, imageError=${imageError}`);
-  if (imageUrl && !imageLoaded && !imageError) {
-    console.log(`Card ${index}: Loading image ${imageUrl}`);
-    const img = new Image();
-    img.onload = () => {
-      console.log(`Card ${index}: Image loaded successfully`);
-      setImageLoaded(true);
-    };
-    img.onerror = () => {
-      console.log(`Card ${index}: Image failed to load`);
-      setImageError(true);
-    };
-  }
-}, [imageUrl, imageLoaded, imageError]);
-```
-
-**Impact:**
-- With 9 cards rendered, 9+ log lines per render
-- Makes debugging harder
-- Leaks internal implementation details to users
-
-**Fix approach:**
-- Remove all console.log statements
-- Or: wrap with `if (process.env.NODE_ENV === 'development')`
-
----
-
-## Error Handling Issues
-
-### Backend Returns HTML, Frontend Expects JSON
-
-**Risk:** Flask's `abort()` function returns HTML error pages, but frontend expects JSON with `data.detail` field.
-
-**Files:** 
-- Backend error responses: `backend/api/routes/auth.py`, `backend/api/routes/payment.py`, `backend/api/routes/chat.py`
-- Frontend error parsing: `frontend/components/Chat.tsx:92`, `frontend/components/PixPaymentModal.tsx:37`
-
-**Example error flow:**
-1. Backend: `abort(402, description="Saldo insuficiente")`
-2. Returns HTML: `<html><body><h1>402 Payment Required</h1><p>Saldo insuficiente</p></body></html>`
-3. Frontend tries: `error.response?.data?.detail` → `undefined`
-4. User sees fallback message instead of real error
-
-**Impact:**
-- Users get generic error messages instead of helpful ones
-- Hard to debug payment failures
-- Bad UX
-
-**Fix approach:**
-- Add Flask error handler in `main.py`:
-```python
-@app.errorhandler(Exception)
-def handle_error(e):
-    return jsonify({
-        "error": str(e.description),
-        "detail": str(e.description)
-    }), e.code or 500
-```
-- Or: use proper exception classes that return JSON
-
----
-
-## Test Coverage
-
-### No Automated Tests
-
-**Risk:** Zero test coverage. Only manual test scripts exist (`test_backend.py`, `test_backend_import.py`).
-
-**Impact:**
-- No regression detection
-- Can't safely refactor
-- Race conditions, security issues wouldn't be caught
-- New developers might break existing functionality
-
-**Critical untested areas:**
-- Race condition in `deduct_balance()`
-- JWT token generation and validation
-- Webhook payment processing
-- Balance calculations across concurrent requests
-
-**Fix approach:**
-- Add pytest for backend: `pytest backend/tests/`
-- Add Jest/Vitest for frontend: `npm test`
-- Set coverage threshold (e.g., 80% for critical paths)
-
----
-
-## Data Integrity
-
-### Non-Transactional Balance Updates
-
-**Risk:** Balance updates are not transactional. No rollback if something fails after balance check.
-
-**Files:** `backend/api/routes/payment.py:220-226`
-
-**Scenario:**
-1. Webhook updates balance
-2. `update_transaction_status()` fails
-3. User keeps money but transaction marked as pending
-4. Duplicate webhook processing could credit twice
-
-**Fix approach:**
-- Use MongoDB transactions (requires replica set)
-- Or: make transaction update succeed/fail atomically with balance update
-
----
-
-### No Duplicate Transaction Prevention
-
-**Risk:** Same webhook could be processed multiple times, crediting user repeatedly.
-
-**Files:** `backend/api/routes/payment.py:193-228`
-
-**Current flow:**
-```python
-transaction = get_transaction_by_identifier(identifier)
-if transaction and transaction.get("status") == "pending":
-    # Credit user
-    update_transaction_status(...)
-```
-
-**Problem:** If webhook retries (network hiccup), second call sees status changed to "paid", so won't credit again. But if update fails, next webhook retry will credit.
-
-**Impact:** Edge case, but can result in double-crediting
-
-**Fix approach:**
-- Use idempotency key from webhook
-- Store processed webhook IDs in database
-- Check before processing: `if webhook_already_processed: return 200`
-
----
-
-## Configuration Issues
-
-### Missing Environment Validation
-
-**Risk:** Application starts without validating all required environment variables, then crashes later in execution.
-
-**Required vars missing validation:**
-- `JWT_SECRET` (uses hardcoded fallback instead of failing fast)
-- `GROQ_API_KEY` (checked at runtime only)
-- `OASIS_PUBLIC_KEY`, `OASIS_SECRET_KEY` (checked only when creating payment)
-- `MONGODB_URI` (assumed to exist)
-- `NEXT_PUBLIC_API_URL` (defaults to localhost)
-
-**Impact:**
-- App deploys to production but fails mid-request
-- Hard to debug configuration problems
-- Better to fail at startup
-
-**Fix approach:**
-- Create config validation module
-- Check all required vars in app initialization
-- Raise clear error message if missing
-
----
-
-## Performance Concerns
-
-### No Database Indexes on Query Fields
-
-**Files:** `backend/api/db/transactions.py:10-16`
-
-**Current indexes:**
-- `user_id`, `charge_id`, `identifier`, `status`, `created_at`
-
-**Missing:**
-- Composite index on `(user_id, status)` for efficient filtering
-- Index on `identifier` for webhook processing (already has single index)
-
-**Impact:** Moderate - queries work but could be slow with 100k+ transactions
-
-**Fix approach:**
-- Add: `collection.create_index([("user_id", 1), ("status", 1)])`
-- Monitor slow query log
-
----
-
-## Fragile Areas
-
-### Card Image Loading Resilience
-
-**Files:** `frontend/components/AnimatedTarotCard.tsx`
-
-**Current handling:**
-- If image fails to load, shows fallback text
-- No retry mechanism
-- No error tracking
-
-**Risk:** CDN outages silently degrade UX without alerting developers
-
-**Fix approach:**
-- Add error tracking (Sentry/similar)
-- Implement retry with exponential backoff
-- Log 404 vs 500 vs timeout differently
-
----
-
-### LLM Fallback Chain Brittle
-
-**Files:** `backend/api/services/llm.py:61-80`
-
-**Current:**
-```python
-for model in models_to_try:
-    try:
-        # Use model
-    except Exception as e:
-        if "decommissioned" not in error_str.lower():
-            return f"Erro: {error}"  # Returns error instead of trying next
-        continue  # Only retries on model errors
-```
-
-**Problem:** Returns error immediately for non-model exceptions (network timeout, auth failure), doesn't try next model
-
-**Fix approach:**
-- Retry all models on all non-permanent errors
-- Only skip model if it's actually decommissioned
-
----
-
-## Known Limitations
-
-### No Database Transactions Support
-
-**Current:** MongoDB without transactions (single-node setup)
-
-**Impact:** Can't atomically update balance + record transaction together
-
-**Workaround currently in place:** Hope race conditions don't happen at scale
-
-**Upgrade path:** Move to MongoDB replica set or use transactional guarantees differently
-
----
-
-### Client-Stored Authentication State
-
-**Risk:** User object and balance stored in localStorage, can be modified by user or XSS attack
-
-**Files:** `frontend/lib/api.ts`, `frontend/components/BuyQuestionButton.tsx`
-
-**Impact:** User could modify balance locally (doesn't affect server but creates UX confusion when synced)
-
-**Fix approach:**
-- Remove balance from localStorage
-- Only fetch from server (requires additional API call)
-- Or: sign localStorage data with server-side key (harder)
-
----
-
-## Summary by Priority
-
-**CRITICAL (Fix immediately):**
-- JWT secret hardcoded fallback
-- XSS via dangerouslySetInnerHTML
-- Webhook amount validation missing
-- Add-credit endpoint accessible without authorization
-- Race condition in deduct_balance
-
-**HIGH (Fix in next sprint):**
-- Double-credit bug after Pix payment
-- Memory leak in setInterval
-- Backend error handler (HTML vs JSON mismatch)
-- Hardcoded input amount
-- No automated tests
-
-**MEDIUM (Fix before scaling):**
-- Dead card animation
-- Console spam
-- Missing environment validation
-- Non-transactional balance updates
-- Duplicate webhook processing
-
-**LOW (Improvement):**
-- Database index optimization
-- LLM fallback chain resilience
-- Card image error tracking
-- Client-stored auth state
-
----
-
-*Concerns audit: 2026-07-07*
+# CONCERNS — Tech Debt & Risks
+Date: 2026-10-07
+
+Evidence-backed scan of `backend/` (Flask + MongoDB + Groq + OasisPay) and `frontend/` (Next.js 14 + axios). No secret values included — env var *names* only.
+
+## Tech Debt (list with file:line refs)
+
+- `backend/api/db/mongodb.py:14-27` — global mutable singleton (`client`/`db`) with lazy init, no timeout / pool / retry options, DB name parsed via `split('/')`. Fragile under serverless (Vercel) cold starts and concurrent workers.
+- `backend/api/db/init.py:9-19` — `init_database()` catches all exceptions and only logs. App in `backend/api/main.py:20` boots without DB/indexes and fails later at request time.
+- `backend/api/models/payment.py:11-12` — `created_at: datetime = datetime.utcnow()` evaluated once at import (classic Pydantic mutable-default bug); every `Transaction` shares same timestamp. Same naive-`utcnow` pattern in `backend/api/models/user.py:37`, `backend/api/routes/auth.py:57,125`, `backend/api/routes/chat.py:47`, `backend/api/db/transactions.py:44,52`.
+- `backend/api/services/payment.py:48-50` — `get_charge_status()` is `raise NotImplementedError`. Dead compatibility shim; polling path never implemented.
+- `backend/api/routes/payment.py:182-202` — `check-status/<id>` only returns local DB status, never queries OasisPay. If webhook is lost, payment stays `pending` forever (frontend times out locally but DB does not).
+- `backend/api/db/transactions.py:18-21` — `create_transaction()` inserts raw dict with no `created_at`/`updated_at`, yet `backend/api/db/transactions.py:58` sorts by `created_at`. New rows from `backend/api/routes/payment.py:137-146` have no timestamp → sort misorders / nulls.
+- `backend/api/services/payment.py:14` — gateway `base_url` hardcoded to `https://app.oasyfy.com/api/v1` (note spelling `oasyfy` vs `OasisPay`). No env override, no timeout on `requests.post` in `backend/api/services/payment.py:44`.
+- `backend/api/routes/payment.py:113-119` — hardcoded placeholder PII `phone` / `document` sent to gateway because signup collects neither. Will fail real KYC validation and leaks test document pattern into prod payloads.
+- `backend/api/routes/auth.py:19-29` — `JWT_SECRET` missing falls back to ephemeral `secrets.token_hex(32)` per process. Safe vs hardcode, but invalidates all sessions on every restart/scale-out; multi-instance deploys break auth.
+- `backend/api/routes/auth.py:29` — `ACCESS_TOKEN_EXPIRE_MINUTES = 60*24*7` (7 days), no refresh-token rotation, no revocation list.
+- `backend/requirements.txt:1-12` — mostly unpinned (`flask>=3.0.0`, `requests` bare, `qrcode[pil]` bare). Non-reproducible builds; `pymongo==4.6.0` pinned while Flask floats.
+- `frontend/lib/api.ts:3` — `NEXT_PUBLIC_API_URL || 'http://localhost:8000'` fallback + `frontend/next.config.js:5` baking env at build time. Staging/prod misconfig silently hits localhost.
+- `frontend/lib/api.ts:101,106`, `frontend/components/PixPaymentModal.tsx:22`, `frontend/app/page.tsx:45,60`, `frontend/components/Chat.tsx:87` — pervasive `any` for API responses/errors. No typed error contract; `detail` vs `error` vs `provider_response` handled ad-hoc (`frontend/components/PixPaymentModal.tsx:64`).
+- `frontend/components/Chat.tsx:55,68,88` — message IDs from `Date.now()`. Collision under rapid send; React key instability.
+- `backend/api/services/llm.py:54-59` — model allowlist hardcoded (`llama-3.3-70b-versatile`, etc.). Groq decommissions models frequently; fallback loop is the only mitigation, no config flag.
+- `backend/api/index.py:1-3` — Vercel entry just `from api.main import app`; `backend/vercel.json:3-8` uses legacy `builds` + `routes` schema instead of current `functions`/`rewrites`. May break on Vercel runtime upgrades.
+- Swallowed exceptions (broad `except Exception: return/abort` with no context): `backend/api/routes/auth.py:41,105,158`, `backend/api/routes/payment.py:162,178`, `backend/api/db/init.py:18`, `backend/api/services/llm.py:74-78`.
+- Local artifact bloat: `backend/__pycache__/`, `backend/.pytest_cache/`, `frontend/.next/` present on disk. Covered by `.gitignore:3,14,46-49` but worth confirming none are tracked (`git ls-files` check pending).
+
+## Known Bugs / Fragile Areas
+
+- **Charged before LLM succeeds:** `backend/api/routes/chat.py:30-37` — `deduct_balance()` runs before `draw_cards()` + `generate_tarot_interpretation()`. LLM error string (`backend/api/services/llm.py:78,83`) is still saved as `interpretation` in `backend/api/routes/chat.py:40-49` and user is not refunded. No `try/except` around LLM + no compensation.
+- **Invalid ObjectId → 500:** `backend/api/db/transactions.py:23-25,35-41`, `backend/api/routes/auth.py:192`, `backend/api/routes/payment.py:36,69,110` call `ObjectId(...)` without `is_valid` guard (auth check at `backend/api/routes/auth.py:81` is the only guard). Malformed `transaction_id` raises `bson.errors.InvalidId`, caught by generic 500 handler `backend/api/main.py:42-45` instead of 400/404.
+- **Unused import = latent crash path:** `backend/api/routes/auth.py:11` imports `InvalidId` but never uses it — evidence the above guard was intended but not wired.
+- **Webhook without token accepts everything:** `backend/api/routes/payment.py:213-215` — `if webhook_validation_token:` means unset token disables auth entirely. Any caller can POST `TRANSACTION_PAID` with arbitrary `identifier`; only saving grace is amount is taken from DB (`backend/api/routes/payment.py:228`) and pending-guard (`backend/api/routes/payment.py:232`).
+- **Frontend expiry diverges from backend:** `frontend/components/PixPaymentModal.tsx:13-14,74-79` marks `expired` after 10 min locally, but backend has no expiry transition — `check-status` (`backend/api/routes/payment.py:193-202`) only returns `pending`. Reopening modal re-polls a still-`pending` row.
+- **XSS mitigation is order-dependent:** `frontend/components/FormattedTarotText.tsx:17-18,93` escapes HTML then uses `dangerouslySetInnerHTML`. Correct today, but `text.slice(0, visibleChars)` in `frontend/components/FormattedTarotText.tsx:87` can split mid-entity (`&amp;`) during typewriter, briefly rendering broken entities; any future regex added before `escapeHtml` reopens XSS (LLM echoes user question per `backend/api/services/llm.py:24-27`).
+- **Auth state split-brain:** balance cached in `localStorage` (`frontend/lib/api.ts:63-64,72-73,116-120`, `frontend/components/Chat.tsx:35-39,78-82`, `frontend/components/BuyQuestionButton.tsx:34-39`) and trusted as fallback in `frontend/components/Chat.tsx:30-41`. Stale balance shown when `/me` fails; no 401 interceptor to force re-login (`frontend/lib/api.ts:12-19` only attaches token).
+- **`UserInDB.to_dict()` can mint a new id:** `backend/api/models/user.py:41` — `ObjectId(self.id) if valid else ObjectId()` silently generates a fresh id on bad input instead of raising.
+- **No question validation:** `backend/api/routes/chat.py:19-25` checks non-empty only. No max length, no rate limit — a multi-KB question inflates prompt tokens (`backend/api/services/llm.py:24-51`) and cost per request.
+
+## Security Notes (patterns, missing validation — names only, no secret values)
+
+- Env-var surface (names only): `JWT_SECRET` (`backend/api/routes/auth.py:19`), `MONGODB_URI` (`backend/api/db/mongodb.py:18`), `GROQ_API_KEY` (`backend/api/services/llm.py:10`), `OASIS_PUBLIC_KEY` / `OASIS_SECRET_KEY` (`backend/api/routes/payment.py:23-24,94-95`), `OASIS_WEBHOOK_TOKEN` (`backend/api/routes/payment.py:27`), `ALLOW_TEST_CREDIT` (`backend/api/routes/payment.py:52`), `ALLOWED_ORIGINS` (`backend/api/main.py:23`), `NEXT_PUBLIC_API_URL` (`frontend/lib/api.ts:3`). `.env` files exist at repo root, `backend/`, `frontend/` — verify none are tracked (`.gitignore:20-22` excludes them, but local presence + OneDrive sync path warrants `git ls-files | grep env`).
+- Test-only credit gate (`backend/api/routes/payment.py:52-53`) is env-flag security; if ever set `true` in prod, any authenticated user mints unlimited balance via `add-credit`. No role check, no audit log.
+- User enumeration: `register` (`backend/api/routes/auth.py:112-113,130-132`) returns distinct `Email já cadastrado` vs generic login failure (`backend/api/routes/auth.py:166-169`). Low severity but enables email harvesting; consider uniform timing/response.
+- No rate limiting / lockout / CAPTCHA on `register`/`login`/`tarot-question`; no request-size limit on chat; CORS allows credentials (`backend/api/main.py:24-28`) with origins from env defaulting to `http://localhost:3000` — review prod `ALLOWED_ORIGINS` for wildcard/over-broad entries.
+- JWT stored in `localStorage` (`frontend/lib/api.ts:14,63`) — vulnerable to theft via any XSS. Mitigations in place: `escapeHtml` (`frontend/components/FormattedTarotText.tsx:17`), no `eval`/`innerHTML` elsewhere; still, `HttpOnly` cookie + short expiry would reduce blast radius.
+- Webhook has no signature verification (plain token equality at `backend/api/routes/payment.py:214`), no replay/nonce check, no source-IP allowlist. Duplicate delivery is handled (`update_transaction_status_if_pending` at `backend/api/db/transactions.py:46-54`), but forged `identifier` enumeration is cheap.
+- `verify_password`/`get_password_hash` (`backend/api/routes/auth.py:32-51`) use `bcrypt` correctly; `UserCreate` enforces `min_length=8` (`backend/api/models/user.py:13`) but no complexity / breach-list check. `UserLogin.password` (`backend/api/models/user.py:18`) has no length cap — very long passwords reach bcrypt (72-byte truncation caveat) without pre-trim/reject.
+- Gateway client PII placeholders (`backend/api/routes/payment.py:117-118`) — test document value in code risks accidental submission to prod KYC and PII logging by provider.
+
+## Performance Risks
+
+- **Synchronous LLM blocks Flask worker:** `generate_tarot_interpretation` (`backend/api/services/llm.py:63-71`) does sequential `client.chat.completions.create` with no `timeout`, `max_tokens=1500`, `temperature=0.8`, up to 4 model attempts in a loop. Under latency, all gunicorn/flask workers saturate; no async, queue, streaming, or caching. Combined with pre-charge (above), slow LLM = paid-for timeouts.
+- **Prompt error-path string matching:** `backend/api/services/llm.py:77` branches on `"decommissioned" in error_str.lower()` — brittle; any non-model error containing word `model` retries needlessly, other transient errors return user-facing error text immediately with no retry/backoff.
+- **Frontend poll storm:** `frontend/components/PixPaymentModal.tsx:13,74` polls `checkStatus` every 5 s up to 10 min per open modal. Many concurrent buyers = sustained GET load on an endpoint that does two DB reads with no index guarantee on `_id` beyond default (secondary indexes at `backend/api/db/transactions.py:10-16` lack `unique=True` on `identifier`/`charge_id`).
+- **Typewriter re-render churn:** `frontend/components/FormattedTarotText.tsx:72-81,86-89` re-runs full regex `processMarkdown` every 12 ms × 4 chars. Long interpretations (~1500 tokens) cause sustained main-thread work on low-end mobile; `useMemo` dep on `visibleChars` invalidates each tick.
+- **Unbounded reads:** `get_user_transactions` (`backend/api/db/transactions.py:56-58`) has no `limit`; `readings` insert (`backend/api/routes/chat.py:40-49`) has no pagination/cap per user. History endpoints (when added) will degrade.
+- **MongoDB connection:** `MongoClient(mongodb_uri)` (`backend/api/db/mongodb.py:23`) with driver defaults — no `serverSelectionTimeoutMS`, `maxPoolSize`, or TLS options explicit. Serverless bursts may exhaust connections.
+- **No CDN/caching headers** for static tarot data (`frontend/data/tarot-data.ts`) and card components (`frontend/components/TarotCards.tsx`, `AnimatedTarotCard.tsx`); images (if any) served without `next/image` optimization.
+
+## Suggested Next Investigation
+
+1. Confirm `.env` untracked + rotate any exposed credentials: `git ls-files | grep -i env; git log --all --full-history -- "*\.env*"`; verify `backend/.env`, `frontend/.env`, root `.env` ignored per `.gitignore:20-22`.
+2. Reproduce invalid-ObjectId 500s: `GET /api/payment/check-status/not-an-id`, `GET /api/auth/me` with malformed `sub`; add `ObjectId.is_valid` guards + tests (see `backend/tests/conftest.py:39-49` fixture pattern).
+3. Close charge-then-fail gap: wrap `backend/api/routes/chat.py:34-49` LLM+insert in try/except with refund (`$inc` balance) or move `deduct_balance` after successful LLM; add regression test in `backend/tests/test_chat.py`.
+4. Harden webhook: require `OASIS_WEBHOOK_TOKEN` in prod (fail-closed), add HMAC/signature check if provider supports it, add `unique` index on `identifier` (`backend/api/db/transactions.py:10-16`).
+5. Add rate limiting (e.g. Flask-Limiter) on `/api/auth/*` and `/api/chat/tarot-question`, plus `max_length` on `question` and request-size cap.
+6. Fix Pydantic timestamps: use `Field(default_factory=datetime.utcnow)` (or timezone-aware `datetime.now(timezone.utc)`) in `backend/api/models/payment.py:11-12`; backfill missing `created_at` on `transactions`.
+7. Pin `backend/requirements.txt` fully (`pip freeze`), add `timeout` to Groq + `requests` calls, make Oasis `base_url` env-configurable, replace placeholder `phone`/`document` with real signup fields or provider test-mode flag.
+8. Frontend: add axios 401 interceptor + typed error union; replace `Date.now()` keys with `crypto.randomUUID()`; debounce poll with exponential backoff and stop on unmount already done (`frontend/components/PixPaymentModal.tsx:29-46`) — extend with `visibilitychange` pause.

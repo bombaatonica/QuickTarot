@@ -1,144 +1,90 @@
-# Coding Conventions
+# CONVENTIONS — Code Style & Patterns
+Date: 2026-10-07
 
-**Analysis Date:** 2026-07-07
+## Code Style (formatting, lint, TS/Python style)
 
-## Naming Patterns
+### Backend — Python / Flask (in `backend/`)
+- No formatter/linter config in repo: no `pyproject.toml`, `ruff.toml`, `.flake8`, `pytest.ini`, or `.github/` CI found (verified via glob). Style is de-facto PEP8, 4-space indent, double quotes.
+- Stack is Flask + Blueprints (not FastAPI despite `README.md` saying FastAPI): `backend/api/main.py` creates `Flask(__name__)` and registers `auth`, `payment`, `chat` blueprints under `/api/*`.
+- Validation with Pydantic v2 models (`backend/requirements.txt`: `pydantic>=2.11.7,<3.0.0`); persistence is raw `pymongo` dicts, not ODM.
+- Type hints on public functions, PT-BR docstrings/comments:
+```python
+# `backend/api/services/tarot.py:6`
+def draw_cards(count: int = 9) -> List[Card]:
+    """
+    Sorteia 'count' cartas aleatórias do deck de tarot
+    """
+```
+- Module-level singletons from env: e.g. `backend/api/routes/payment.py:22-27` builds `oasis_service = OasisPayService(...)` at import from `OASIS_PUBLIC_KEY`/`OASIS_SECRET_KEY`; `backend/api/routes/auth.py:19-29` reads `JWT_SECRET` at import with ephemeral `secrets.token_hex(32)` fallback + warning log.
+- Logging is stdlib `logging.getLogger(__name__)`; startup init never crashes (`backend/api/db/init.py:9-19` wraps index creation in try/except + `logger.exception`).
 
-**Files:**
-- **Backend**: snake_case, module files match their function scope (e.g., `auth.py` for authentication routes, `tarot.py` for tarot service)
-- **Frontend**: PascalCase for React components (e.g., `Chat.tsx`, `Message.tsx`, `BuyQuestionButton.tsx`), camelCase for utilities (e.g., `api.ts`, `tarot-data.ts`)
-- **Models/Data**: PascalCase classes in backend (e.g., `UserCreate`, `TarotReading`), interfaces in frontend (e.g., `User`, `LoginData`, `TarotResponse`)
+### Frontend — TypeScript / Next.js 14 App Router (in `frontend/`)
+- `frontend/tsconfig.json`: `strict: true`, `target: es5`, `jsx: preserve`, `moduleResolution: bundler`, path alias `@/*` → `./*`. No `.eslintrc*` file; lint is `next lint` via `frontend/package.json:9` (`"lint": "next lint"`). Typecheck is separate: `"typecheck": "tsc --noEmit"`.
+- No Prettier config; style is 2-space indent, single quotes, semicolons, Tailwind utility classes inline.
+- All interactive components start with `'use client';` (e.g. `frontend/components/Chat.tsx:1`, `frontend/components/Message.tsx:1`, `frontend/app/page.tsx:1`).
+- Styling: Tailwind with custom theme tokens `bordeaux-*` / `gold-*`, `font-display`, `shadow-gold-glow`, animations `animate-fade-in` / `animate-orb-pulse` defined in `frontend/tailwind.config.ts:11-66`.
 
-**Functions:**
-- **Backend**: snake_case (e.g., `draw_cards()`, `verify_password()`, `get_database()`, `get_current_user()`)
-- **Frontend**: camelCase (e.g., `handleLogin()`, `handleSend()`, `loadBalance()`, `scrollToBottom()`)
-- **Handler functions**: prefix with `handle` in React components (e.g., `handleLogin`, `handleRegister`, `handleSend`)
-- **Load/Fetch functions**: prefix with `load` or use async patterns (e.g., `loadBalance()`, `loadUser()`)
+## Naming (files, vars, functions, components)
 
-**Variables:**
-- **Backend**: snake_case throughout (e.g., `user_id`, `hashed_password`, `current_balance`, `mongodb_uri`)
-- **Frontend**: camelCase (e.g., `isAuthenticated`, `isLoading`, `showLogin`, `loginData`)
-- **Constants**: UPPER_CASE in both (e.g., `ACCESS_TOKEN_EXPIRE_MINUTES`, `QUESTION_PRICE`, `ALGORITHM`)
-- **State variables**: Use verb + noun pattern in React (e.g., `isLoading`, `showModal`, `showInterpretation`)
+- **Files:** backend `snake_case.py` (`backend/api/services/payment.py`, `backend/api/db/transactions.py`); frontend components `PascalCase.tsx` (`frontend/components/Chat.tsx`, `frontend/components/BuyQuestionButton.tsx`, `frontend/components/PixPaymentModal.tsx`, `frontend/components/TarotCards.tsx`); lib/routes `snake_case` or lowercase (`frontend/lib/api.ts`, `backend/api/routes/chat.py`); tests `test_*.py` + `*.spec.ts`.
+- **Vars/functions:** `snake_case` in Python (`get_password_hash`, `verify_password`, `deduct_balance`, `draw_cards` in `backend/api/routes/auth.py:32-51`, `backend/api/routes/payment.py:244`, `backend/api/services/tarot.py:6`); `camelCase` in TS (`handleSend`, `loadBalance`, `scrollToBottom` in `frontend/components/Chat.tsx:30-49`; `askTarotQuestion`, `getBalance`, `createPix` in `frontend/lib/api.ts:59-124`).
+- **Components/interfaces:** `PascalCase` (`ChatMessage`, `TarotCard`, `TarotResponse`, `User` in `frontend/components/Chat.tsx:8-14` and `frontend/lib/api.ts:21-57`); Pydantic models `UserCreate`, `UserLogin`, `UserResponse`, `Card`, `Suit`, `Transaction` in `backend/api/models/user.py`, `backend/api/models/tarot.py`, `backend/api/models/payment.py`.
+- **Routes/endpoints:** kebab-case URLs under `/api/*`: `/api/auth/register`, `/api/auth/login`, `/api/auth/me`, `/api/payment/balance`, `/api/payment/create-pix`, `/api/payment/check-status/<id>`, `/api/chat/tarot-question` (see `backend/api/main.py:31-33` + route decorators).
+- **Constants:** `UPPER_SNAKE` for prices/keys (`QUESTION_PRICE = 1.0` in `backend/api/routes/chat.py:12`; `ACCESS_TOKEN_EXPIRE_MINUTES`, `ALGORITHM`, `SECRET_KEY` in `backend/api/routes/auth.py:28-29`; `API_URL` in `frontend/lib/api.ts:3`).
 
-**Types:**
-- **Backend**: Pydantic models for validation and serialization (e.g., `UserBase`, `UserCreate`, `UserLogin`, `Card`, `TarotReading`)
-- **Frontend**: TypeScript interfaces for API contracts (e.g., `User`, `LoginData`, `TarotResponse`, `TarotCard`, `Message`)
-- **Enums**: Used for fixed sets (e.g., `Suit` enum in `backend/api/models/tarot.py` with `WANDS`, `CUPS`, `SWORDS`, `PENTACLES`)
+## Common Patterns (with short code examples + file refs)
 
-## Code Style
+1. **Blueprint + `require_auth` decorator** — every private route injects `current_user`:
+```python
+# `backend/api/routes/auth.py:88-94`
+def require_auth(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        current_user = get_current_user()
+        return f(current_user=current_user, *args, **kwargs)
+    return decorated_function
+# usage `backend/api/routes/chat.py:15-17`
+@bp.route("/tarot-question", methods=["POST"])
+@require_auth
+def ask_tarot_question(current_user: dict):
+```
+2. **Pydantic-validate then raw-dict Mongo insert** (`backend/api/routes/auth.py:103-133`): `UserCreate(**data)` → `bcrypt` hash → `users_collection.insert_one(user_doc)`.
+3. **Atomic balance ops** to avoid races (`backend/api/routes/payment.py:253-256`):
+```python
+result = users_collection.find_one_and_update(
+    {"_id": ObjectId(user_id), "balance": {"$gte": amount}},
+    {"$inc": {"balance": -amount}}
+)
+```
+Same idea for idempotent webhook: `update_transaction_status_if_pending` filters `status: pending` (`backend/api/db/transactions.py:46-54`).
+4. **Service-layer split `routes/` → `services/` → `db/`/`models/`**: `backend/api/routes/chat.py` orchestrates `deduct_balance` + `draw_cards` + `generate_tarot_interpretation`; `backend/api/services/llm.py:54-80` loops `models_to_try` with fallback; `backend/api/db/transactions.py:18-21` wraps collection access.
+5. **Axios singleton + interceptors + `localStorage` session** (`frontend/lib/api.ts:5-19`, `59-87`):
+```ts
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) { config.headers.Authorization = `Bearer ${token}`; }
+  return config;
+});
+```
+`authApi.login/register` persist `token`+`user`; `chatApi.askTarotQuestion` refreshes `user.balance` from response (`frontend/lib/api.ts:112-124`).
+6. **Optimistic chat UI with local state + `useRef` scroll** (`frontend/components/Chat.tsx:51-98`): push user msg → `setIsLoading(true)` → append assistant msg or `isError` msg; `messagesEndRef.current?.scrollIntoView({behavior:'smooth'})`.
+7. **Memoized presentational components** (`frontend/components/Message.tsx:63`: `export default memo(Message)`; `useCallback` for `handleAnimationComplete`).
 
-**Formatting:**
-- No explicit ESLint or Prettier config found in frontend; Next.js lint enabled via `npm run lint` in `frontend/package.json`
-- Python backend follows standard PEP8 conventions (implied by Flask best practices)
-- Indentation: 2 spaces for TypeScript/React, 4 spaces for Python (standard)
+## Error Handling (patterns + examples)
 
-**Linting:**
-- **Frontend**: Next.js built-in linting (`next lint` command in `frontend/package.json`)
-- **Backend**: No explicit linter configured; follows Flask conventions
-- **TypeScript**: Strict mode enabled (`"strict": true` in `frontend/tsconfig.json`)
-
-**Imports:**
-- **Frontend**: Path aliases used (`@/*` resolves to project root) - see `frontend/tsconfig.json` line 21-23
-  - Example: `import { chatApi, authApi, User } from '@/lib/api';` in `frontend/app/page.tsx` line 5
-  - Example: `import Message from '@/components/Message';` in `frontend/components/Chat.tsx` line 4
-- **Backend**: Relative imports with dot notation (e.g., `from ..routes.auth import require_auth` in `backend/api/routes/chat.py` line 2)
-- **Organization**: No strict grouping visible, but imports ordered by external → internal packages
-
-## Error Handling
-
-**Backend Patterns:**
-- Uses Flask's `abort()` function with HTTP status codes and descriptions
-- Example: `abort(400, description="Email já cadastrado")` in `backend/api/routes/auth.py` line 101
-- Example: `abort(402, description=f"Saldo insuficiente...")`  in `backend/api/routes/chat.py` line 31
-- Returns boolean flags for soft failures (e.g., `deduct_balance()` returns `False` if insufficient funds in `backend/api/routes/payment.py` line 231)
-- Try-except blocks for external API calls with specific exception handling:
-  - `requests.exceptions.HTTPError` caught separately for API errors
-  - `requests.exceptions.RequestException` for network issues
-  - Generic `Exception` as final fallback
-  - Example in `backend/api/routes/payment.py` lines 147-167
-
-**Frontend Patterns:**
-- Try-catch with fallback error display via alert or error messages in state
-- Example: `catch (error: any) { alert(error.response?.data?.detail || 'Erro ao fazer login'); }` in `frontend/app/page.tsx` line 42
-- Graceful degradation: if API fails, fall back to localStorage data
-  - Example in `frontend/components/Chat.tsx` lines 27-39: loads balance from server, falls back to localStorage
-- Promise rejection handling via axios interceptors for failed requests
-
-## Logging
-
-**Framework:** 
-- **Frontend**: `console` API only (not explicitly shown, but standard React pattern)
-- **Backend**: `print()` statements for stdout logging (simple integration tests use print in `test_backend.py` and `test_backend_import.py`)
-
-**Patterns:**
-- **Test files**: Verbose print statements documenting test flow (e.g., `print("=== TESTE DO BACKEND ===")` in `test_backend.py` line 9)
-- **Backend services**: Minimal logging; relies on exception handling to surface errors
-- **Frontend**: No explicit logging; relies on browser console and error alerts
-
-## Comments
-
-**When to Comment:**
-- **Docstrings**: Used on service functions explaining purpose and parameters
-  - Example: `"""Verifica se a senha corresponde ao hash usando bcrypt"""` in `backend/api/routes/auth.py` line 21
-  - Example: `"""Sorteia 'count' cartas aleatórias do deck de tarot"""` in `backend/api/services/tarot.py` line 7
-- **Inline comments**: Minimal; used to explain complex logic
-  - Example: `# Aguardar um pouco para o backend iniciar` in `test_backend.py` line 21
-  - Example: `# Formato: "Bearer <token>"` in `backend/api/routes/auth.py` line 59
-
-**JSDoc/TSDoc:**
-- No explicit JSDoc or TSDoc found in TypeScript components
-- Interface definitions serve as documentation in `frontend/lib/api.ts`
-
-## Function Design
-
-**Size:**
-- Functions generally 10-50 lines; keeps logic focused and readable
-- Service functions like `generate_tarot_interpretation()` in `backend/api/services/llm.py` are ~40 lines including prompt construction
-- Route handlers like `register()` and `login()` in `backend/api/routes/auth.py` are ~50-65 lines
-
-**Parameters:**
-- **Backend**: Use Pydantic models for complex inputs (e.g., `UserCreate` in register route)
-- **Frontend**: Props interfaces for React components (e.g., `MessageProps`, `BuyQuestionButtonProps`)
-- **Decorators**: Backend uses Flask decorators for route definition and auth requirement (`@bp.route()`, `@require_auth`)
-
-**Return Values:**
-- **Backend**: Flask routes return `jsonify()` responses with dicts/lists, service functions return plain Python objects
-  - Example: `return jsonify({ "access_token": access_token, ...})` in `backend/api/routes/auth.py` line 122
-- **Frontend**: Async functions return typed data via promises (e.g., `async getMe(): Promise<User>` in `frontend/lib/api.ts` line 78)
-
-## Module Design
-
-**Exports:**
-- **Backend**: Flask Blueprints with `bp` naming convention
-  - Example: `bp = Blueprint('auth', __name__)` in `backend/api/routes/auth.py` line 13
-  - Registered in main app via `app.register_blueprint(auth.bp, url_prefix="/api/auth")` in `backend/api/main.py` line 25
-- **Frontend**: Named exports for utilities (e.g., `export const authApi = { ... }` in `frontend/lib/api.ts` line 59)
-  - Components exported as `export default` (e.g., `export default function Home()` in `frontend/app/page.tsx` line 7)
-
-**Barrel Files:**
-- **Backend**: Minimal use; each module imports directly from source
-- **Frontend**: No barrel files observed; direct imports from files
-
-## Cross-Cutting Concerns
-
-**Authentication:**
-- Backend: Custom decorator `@require_auth` wraps route handlers, extracts JWT from `Authorization` header
-  - Example in `backend/api/routes/auth.py` lines 76-82
-- Frontend: API interceptor adds token to every request, logout clears token/user from localStorage
-  - Example in `frontend/lib/api.ts` lines 13-19
-
-**State Synchronization:**
-- Frontend: Multiple sources of truth pattern — localStorage, component state, and API response
-  - Example: `Chat.tsx` updates `balance` from API response and syncs back to localStorage (lines 74-87)
-  - Pattern: External prop from parent + internal state fallback (e.g., `BuyQuestionButton.tsx` line 22: `const balance = externalBalance !== undefined ? externalBalance : internalBalance`)
-
-**Configuration:**
-- Backend: Uses `.env` files loaded via `python-dotenv` at app startup
-  - Example: `_dotenv_path = os.path.abspath(...)` in `backend/api/main.py` line 8
-  - Environment variables accessed via `os.getenv()`
-- Frontend: Environment variables prefixed with `NEXT_PUBLIC_` (e.g., `process.env.NEXT_PUBLIC_API_URL` in `frontend/lib/api.ts` line 3)
-
----
-
-*Convention analysis: 2026-07-07*
+- **Backend always returns JSON `{"detail": ...}`** — enforced by global handlers (`backend/api/main.py:36-45`):
+```python
+@app.errorhandler(HTTPException)
+def handle_http_exception(e: HTTPException):
+    return jsonify({"detail": e.description}), e.code
+@app.errorhandler(Exception)
+def handle_unexpected_exception(e: Exception):
+    logging.getLogger(__name__).exception("Erro não tratado")
+    return jsonify({"detail": "Erro interno do servidor"}), 500
+```
+Routes use `abort(400/401/403/404, description="...")` with PT-BR messages (e.g. `backend/api/routes/auth.py:112-113` `"Email já cadastrado"`; `backend/api/routes/chat.py:30-31` returns `402` JSON directly because Werkzeug has no 402 exception).
+- **Defensive auth parsing** (`backend/api/routes/auth.py:64-85`): missing header → 401 `"Token não fornecido"`; non-Bearer/split failure → 401; `JWTError` or invalid `ObjectId` → 401 `"Token inválido"`. `verify_password` catches all exceptions → `False` (`backend/api/routes/auth.py:41-42`).
+- **`DuplicateKeyError` → 400** on register race (`backend/api/routes/auth.py:129-132`); `init_database()` swallows index errors to log-only (`backend/api/db/init.py:18-19`).
+- **Payment provider errors mapped to 502** with provider payload passthrough (`backend/api/routes/payment.py:157-175`); webhook validates `OASIS_WEBHOOK_TOKEN` → 401, missing `identifier` → 400, trusts only DB-stored `amount` not webhook payload (`backend/api/routes/payment.py:205-241`).
+- **LLM fallback chain** (`backend/api/services/llm.py:61-83`): try `llama-3.3-70b-versatile` → `llama-3.1-*` → `mixtral-*`; non-model errors return inline `"Erro ao gerar interpretação: ..."` string instead of raising.
+- **Frontend surfaces `detail` inline, never `alert()`** (`frontend/components/Chat.tsx:87-94`: `error.response?.data?.detail || 'Erro ao processar pergunta...'`; `frontend/app/page.tsx:45-46`: `setAuthError(error.response?.data?.detail || 'Erro ao fazer login')` rendered in `<p role="alert">`).

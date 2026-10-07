@@ -1,222 +1,69 @@
-# Testing Patterns
+# TESTING — Test Structure & Practices
+Date: 2026-10-07
 
-**Analysis Date:** 2026-07-07
+## Framework & Runner
 
-## Test Framework
+- **Backend:** `pytest>=8.0.0` + `mongomock>=4.1.0` (only entries in `backend/requirements-dev.txt:1-2`). Flask test client via `flask_app.test_client()` (`backend/tests/conftest.py:36`). No coverage plugin, no `pytest.ini`/`pyproject.toml` config — defaults apply.
+- **Frontend:** `@playwright/test@^1.61.1` E2E only (`frontend/package.json:20`, script `frontend/package.json:10` `"test:e2e": "playwright test"`). Config in `frontend/playwright.config.ts:3-29`: `testDir: './e2e'`, `timeout: 60_000`, `fullyParallel: true`, `baseURL: http://localhost:3100`, projects `desktop` (Desktop Chrome 1280×800) + `mobile` (Pixel 7), `webServer: npm run dev -- -p 3100` with `reuseExistingServer: true`. No unit runner (no Jest/Vitest) — `frontend/package.json` has no `test` script besides `test:e2e` and `typecheck`.
+- **No CI config:** no `.github/` workflows, no lint/typecheck gate in repo (verified via glob).
 
-**Runner:**
-- **Backend**: No formal test framework (pytest, unittest); uses manual integration test scripts
-- **Frontend**: No test framework; no tests exist
-- Config: No pytest.ini, setup.cfg, or test configuration files present
+## Test Layout (where tests live)
 
-**Assertion Library:**
-- Manual assertions using `if` statements and print statements in test scripts
-- HTTP status code validation (e.g., `if response.status_code == 200:` in `test_backend.py` line 28)
-- isinstance() checks for type validation (e.g., `if isinstance(app, Flask):` in `test_backend_import.py` line 32)
+- **Backend** — `backend/tests/` (4 files):
+  - `backend/tests/conftest.py` — env setup + fixtures (sets `JWT_SECRET`, injects `mongomock`, `clean_db`, `client`, `registered_user`, `auth_headers`).
+  - `backend/tests/test_auth.py` (100 lines) — classes `TestRegister` / `TestLogin` / `TestMe` (14 cases: success, duplicate email, short password, invalid email, empty body, bcrypt hash check, wrong password, unknown email, JSON-`detail` shape, `/me` auth variants).
+  - `backend/tests/test_chat.py` (89 lines) — class `TestTarotQuestion` (7 cases: requires auth, 402 insufficient balance, empty/missing question, successful 9-card reading + `balance == 4.0`, history persisted, cards unique).
+  - `backend/tests/test_payment.py` (155 lines) — classes `TestBalance` / `TestAddCredit` / `TestDeductBalance` / `TestWebhook` / `TestCheckStatus` (15 cases incl. `ALLOW_TEST_CREDIT` gate, webhook double-spend, token validation).
+  - `backend/tests/__init__.py` — empty package marker.
+- **Frontend** — `frontend/e2e/` (5 files):
+  - `frontend/e2e/mocks.ts` — shared `mockUser`, 9-card `mockCards` (names must match `frontend/data/tarot-data.ts`), `mockInterpretation`, `fulfillJson` route helper (CORS + OPTIONS aware), `loginAs` (localStorage token + `/api/auth/me` mock).
+  - `frontend/e2e/auth.spec.ts` (76 lines) — 6 tests: login screen, login→chat, wrong-credential inline error (`role=alert`), register→chat, bad token→login, valid session→chat + balance `5,00`.
+  - `frontend/e2e/chat.spec.ts` (76 lines) — 5 tests: welcome + price, 9-card reveal + interpretation + balance `4,00`, 402 insufficient-balance message, 500 keeps UI usable, empty input disables `Enviar`.
+  - `frontend/e2e/payment.spec.ts` (107 lines) — 5 tests: min-value `R$ 2,00` inline validation, Pix QR + copia-e-cola, paid→modal closes + balance `15,00` (20s timeout for 5s polling), 502 provider error inline, modal cancel resets.
+  - `frontend/e2e/ui.spec.ts` (96 lines) — 6 visual/screenshot tests writing to `e2e/screenshots/<project>-*.png` (login, registro, chat-vazio, tiragem, modal-valor/qrcode, login-erro).
 
-**Run Commands:**
+## Mocking & Fixtures
+
+- **Backend `mongomock` instead of real Mongo** (`backend/tests/conftest.py:13-15`):
+```python
+_mock_client = mongomock.MongoClient()
+mongodb.client = _mock_client
+mongodb.db = _mock_client["quicktarot_test"]
+```
+`clean_db` autouse fixture wipes every collection per test (`backend/tests/conftest.py:27-31`); `registered_user` registers `user@test.com` / `senha12345` and returns `(headers, user)` (`backend/tests/conftest.py:39-49`).
+- **LLM never called in tests** — `monkeypatch` replaces the symbol imported into the route module (`backend/tests/test_chat.py:9-16`):
+```python
+monkeypatch.setattr(chat_module, "generate_tarot_interpretation",
+    lambda question, cards: FAKE_INTERPRETATION)
+```
+- **Env/feature-flag control via `monkeypatch`** (`backend/tests/test_payment.py:24-37`): `monkeypatch.delenv("ALLOW_TEST_CREDIT")` → 403; `monkeypatch.setenv("ALLOW_TEST_CREDIT","true")` → 200; `monkeypatch.setattr(payment_module, "webhook_validation_token", "segredo")` for webhook auth tests.
+- **Frontend network interception, no backend** (`frontend/e2e/mocks.ts:44-63`): `page.route('**/api/...', fulfillJson(...))` + `loginAs(page)` seeding `localStorage`. Selectors are accessible-role based: `getByRole`, `getByLabel('Email')`, `getByPlaceholder('Faça sua pergunta ao oráculo...')`, `getByTestId('balance')`, `getByAltText(card.name)` / `'QR Code Pix'`.
+
+## Coverage & Gaps
+
+- **Well covered:** auth register/login/me + bcrypt hashing (`backend/tests/test_auth.py:39-46` asserts `$2` prefix); tarot price deduction, 9-card uniqueness, history write (`backend/tests/test_chat.py:48-89`); webhook security — credits DB-stored amount not payload amount, duplicate webhook credits once, `pending→paid` atomic transition (`backend/tests/test_payment.py:73-104`); E2E happy paths + 401/402/500 inline-error UX (`frontend/e2e/chat.spec.ts:46-70`, `frontend/e2e/auth.spec.ts:27-40`).
+- **Gaps (no tests found):**
+  - `backend/api/services/tarot.py:17-29` (`format_cards_for_llm`), `backend/api/services/llm.py` fallback loop, `backend/api/services/payment.py` (`receive_pix`, `generate_qr_code`) — no unit tests; `create-pix` success path untested (only webhook/check-status covered).
+  - `backend/api/db/mongodb.py`, `backend/api/db/init.py`, `backend/api/db/transactions.py` helpers (except via integration) — no direct tests.
+  - Frontend has zero unit/component tests (no Jest/Vitest); `frontend/components/*` (`AnimatedTarotCard`, `TarotCards`, `FormattedTarotText`, `PixPaymentModal`, `BuyQuestionButton`) covered only indirectly via Playwright.
+  - No coverage thresholds, no mutation/load tests, no contract tests for `OasisPay`/`Groq`; screenshot tests in `frontend/e2e/ui.spec.ts` produce artifacts but assert little beyond visibility.
+
+## How To Run Tests (commands)
+
 ```bash
-# Backend integration test (manual process startup + health check)
-python test_backend.py
+# Backend (from backend/): install + run full suite
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -v
+# single file / single test
+pytest tests/test_auth.py -v
+pytest tests/test_payment.py::TestWebhook -v
 
-# Backend import validation test (module and route verification)
-python test_backend_import.py
-
-# Frontend development
-npm run dev          # from frontend/
-
-# Frontend build
-npm run build        # from frontend/
-
-# Frontend lint
-npm run lint         # from frontend/
+# Frontend (from frontend/): E2E spins its own dev server on :3100
+npm install
+npm run test:e2e              # all specs, both projects
+npx playwright test e2e/chat.spec.ts        # one file
+npx playwright test e2e/auth.spec.ts --project=desktop
+# static checks (no unit tests exist)
+npm run typecheck   # tsc --noEmit
+npm run lint        # next lint
 ```
-
-## Test File Organization
-
-**Location:**
-- Test files at repository root: `test_backend.py` and `test_backend_import.py`
-- No tests for frontend
-- No tests under `backend/` or `frontend/` directories
-- No pytest configuration or test discovery setup
-
-**Naming:**
-- Pattern: `test_<system>.py` (e.g., `test_backend.py`, `test_backend_import.py`)
-- No `__pycache__` or `.pytest_cache` in gitignore
-
-**Structure:**
-```
-QuickTarot/
-├── test_backend.py           # Integration test
-├── test_backend_import.py     # Module import validation
-├── backend/
-├── frontend/
-└── .planning/
-```
-
-## Test Structure
-
-**Suite Organization:**
-
-Test files are standalone scripts with a single `main()` function:
-
-```python
-def test_backend():
-    try:
-        print("=== TESTE DO BACKEND ===")
-        # Steps...
-    except subprocess.CalledProcessError as e:
-        print(f"Erro ao executar aplicação: {e}")
-
-if __name__ == "__main__":
-    test_backend()
-```
-
-**Patterns:**
-
-1. **Setup phase** (lines 9-19 in `test_backend.py`):
-   - Install dependencies via pip
-   - Start backend process with `subprocess.Popen()`
-   - Wait for process initialization with `time.sleep()`
-
-2. **Test phase** (lines 24-33):
-   - Make HTTP request to health endpoint
-   - Validate response status code
-   - Print ✅/❌ results
-
-3. **Teardown phase** (lines 35-38):
-   - Terminate process with `backend_process.terminate()`
-   - Wait for cleanup with `backend_process.wait()`
-
-Example from `test_backend_import.py`:
-
-```python
-def test_backend_import():
-    try:
-        print("=== TESTE DE IMPORTAÇÃO DO BACKEND ===")
-        print("1. Instalando dependências...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "backend/requirements.txt"])
-        
-        print("\n2. Testando importação dos módulos...")
-        try:
-            # Import modules
-            import pymongo
-            from flask import Flask
-            # ... more imports
-            print("✅ Módulos importados com sucesso!")
-        except Exception as e:
-            print(f"❌ Erro ao importar módulos: {e}")
-    except subprocess.CalledProcessError as e:
-        print(f"Erro ao executar aplicação: {e}")
-```
-
-## Mocking
-
-**Framework:** 
-- No mocking framework present (unittest.mock not used)
-- Manual test isolation via subprocess spawning
-
-**Patterns:**
-- Subprocess spawning for true integration testing (not mocking)
-  - `subprocess.Popen()` starts real backend server (test_backend.py line 14-19)
-  - Process runs with real file I/O, network ports, environment
-- Real HTTP requests via `requests` library (not mocked)
-  - `requests.get("http://localhost:8000/health")` in `test_backend.py` line 27
-
-**What to Mock:**
-- Currently: nothing is mocked; all tests are integration tests
-- Future mocking candidates: external APIs (Groq LLM, OasisPay payment service)
-- Currently these are tested via real API calls during development
-
-**What NOT to Mock:**
-- Database connections (not tested in current test suite)
-- Flask app routes (tests import and check real app)
-- HTTP layer (real subprocess and HTTP requests used)
-
-## Fixtures and Factories
-
-**Test Data:**
-- No fixtures or factories found
-- Tests use hardcoded test values when needed (e.g., in `test_backend_import.py`, imports are real dependency modules)
-- No test database setup/teardown
-
-**Location:**
-- No dedicated fixtures directory
-- Tests are self-contained in single files
-
-## Coverage
-
-**Requirements:** 
-- No coverage enforcement; no coverage target defined
-- No coverage measurement tools configured
-
-**View Coverage:**
-- No coverage command available; manual verification only by running tests
-
-## Test Types
-
-**Unit Tests:**
-- Not present; no isolated function-level tests
-- Would need to mock MongoDB, Flask request context, and external APIs
-
-**Integration Tests:**
-- **Backend Integration** (`test_backend.py`):
-  - Starts real Flask server on localhost:8000
-  - Installs real dependencies
-  - Validates health endpoint response
-  - Scope: End-to-end HTTP request/response cycle
-  
-- **Import Validation** (`test_backend_import.py`):
-  - Tests that all required packages can be imported
-  - Validates Flask app is properly instantiated
-  - Checks that registered routes exist and are accessible
-  - Tests: pymongo, flask, flask-cors, python-dotenv, and app routes
-  - Lists all registered routes for verification
-
-**E2E Tests:**
-- Not present; no E2E testing framework (Playwright, Cypress, Selenium) configured
-- Frontend has no test infrastructure
-
-## Common Patterns
-
-**Async Testing:**
-- Backend: Synchronous routes; no async/await pattern in Flask code
-- Frontend: useState hooks used for async operations
-  - Pattern: `const [isLoading, setIsLoading] = useState(false)` followed by try-catch in handler
-  - Example in `frontend/components/Chat.tsx` lines 18, 49-61
-- Manual async handling via promises in API calls (`async/await` in frontend lib functions)
-
-**Error Testing:**
-- Backend: Routes validate inputs and call `abort()` with appropriate HTTP codes
-  - Example: `abort(400, description="Dados inválidos: 'question' é obrigatório")` in `backend/api/routes/chat.py` line 21
-  - Example: `abort(402, description=f"Saldo insuficiente...")`  in `backend/api/routes/chat.py` line 31
-- Frontend: Try-catch blocks with user-facing error messages
-  - Example in `frontend/app/page.tsx` lines 35-44: login error caught and displayed via alert
-  - Example in `frontend/components/Chat.tsx` lines 88-94: API error with fallback message
-
-**Process Management (test-specific):**
-- `subprocess.Popen()` for background process spawning (test_backend.py line 14)
-- `subprocess.check_call()` for dependency installation (both test files line 11 and line 9)
-- `time.sleep()` for timing-based waits (test_backend.py line 22)
-
-## Gap Analysis
-
-**Missing Test Coverage:**
-- Database layer: No tests for MongoDB connections, queries, or transactions
-- Authentication: No tests for JWT token validation, password hashing, or authorization
-- Services: No tests for Groq LLM integration, tarot card drawing, payment processing
-- Frontend: No component tests, no state management tests, no integration tests
-- Error scenarios: No explicit tests for edge cases (empty questions, invalid amounts, missing tokens)
-- Concurrency: No load testing or concurrent request handling verification
-
-**Recommendations for Expansion:**
-1. Add pytest-based unit tests with mocking for backend services
-2. Add integration tests for database operations
-3. Add E2E tests for full user flows (register → ask question → payment)
-4. Add frontend component tests with React Testing Library or Vitest
-5. Add API contract tests to validate request/response schemas
-6. Document manual testing procedures for external services (Groq, OasisPay)
-
----
-
-*Testing analysis: 2026-07-07*

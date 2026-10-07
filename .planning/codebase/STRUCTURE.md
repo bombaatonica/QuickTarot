@@ -1,254 +1,161 @@
-# Codebase Structure
+# STRUCTURE — Directory Layout
+Date: 2026-10-07
 
-**Analysis Date:** 2026-07-07
-
-## Directory Layout
+## Root Layout
 
 ```
 QuickTarot/
-├── backend/                        # Flask API server
+├── frontend/                  # Next.js 14 App Router app (deployed to Vercel separately)
+│   ├── app/                   # Routes: page.tsx (auth gate + chat), layout.tsx, globals.css
+│   ├── components/            # UI: Chat, Message, TarotCards, AnimatedTarotCard,
+│   │                          #   FormattedTarotText, BuyQuestionButton, PixPaymentModal
+│   ├── lib/                   # api.ts — axios client + authApi/paymentApi/chatApi facades
+│   ├── data/                  # tarot-data.ts — 78-card client catalog → /tarot-cards/*.jpg
+│   ├── e2e/                   # ui.spec.ts — Playwright E2E (playwright.config.ts)
+│   ├── public/                # (frontend-local static; canonical card art lives in /public below)
+│   ├── next.config.js         # NEXT_PUBLIC_API_URL (default http://localhost:8000)
+│   ├── tailwind.config.ts / postcss.config.js / tsconfig.json / package.json
+│   └── vercel.json            # Frontend Vercel project config
+├── backend/                   # Flask API (Vercel python serverless function)
 │   ├── api/
-│   │   ├── main.py                # Flask app entry point + blueprint registration
-│   │   ├── __init__.py
-│   │   ├── routes/                # HTTP endpoint handlers (3 blueprints)
-│   │   │   ├── auth.py            # /api/auth/* - registration, login, current user
-│   │   │   ├── payment.py         # /api/payment/* - balance, payments, webhooks
-│   │   │   ├── chat.py            # /api/chat/* - tarot question endpoint
-│   │   │   └── __init__.py
-│   │   ├── services/              # Business logic layer
-│   │   │   ├── tarot.py           # Card drawing + formatting
-│   │   │   ├── llm.py             # Groq API calls for interpretation
-│   │   │   ├── payment.py         # OasisPay API wrapper
-│   │   │   └── __init__.py
-│   │   ├── db/                    # Data access layer
-│   │   │   ├── mongodb.py         # MongoDB connection singleton
-│   │   │   ├── transactions.py    # Transaction CRUD operations
-│   │   │   ├── init.py
-│   │   │   └── __init__.py
-│   │   ├── models/                # Pydantic schemas for validation
-│   │   │   ├── user.py            # User, UserCreate, UserLogin, UserInDB
-│   │   │   ├── tarot.py           # Card, Suit, TarotReading
-│   │   │   ├── payment.py         # Transaction model
-│   │   │   └── __init__.py
-│   ├── requirements.txt           # Python dependencies
-│   ├── setup.py                   # Dependency installer script
-│   └── .env                       # Environment variables (not committed)
-│
-├── frontend/                       # Next.js 14 React app
-│   ├── app/
-│   │   ├── page.tsx               # Root page - auth check + renders Chat
-│   │   ├── layout.tsx             # HTML structure + metadata
-│   │   └── globals.css            # Global styles
-│   ├── components/                # Reusable React components
-│   │   ├── Chat.tsx               # Main chat interface + message history
-│   │   ├── Message.tsx            # Individual message display
-│   │   ├── BuyQuestionButton.tsx  # Balance + credit purchase modal
-│   │   ├── PixPaymentModal.tsx    # QR code display for Pix
-│   │   ├── AnimatedTarotCard.tsx  # Card animation display
-│   │   ├── TarotCards.tsx         # Card grid layout
-│   │   ├── TypewriterText.tsx     # Text animation effect
-│   │   └── FormattedTarotText.tsx # Parse + format LLM response
-│   ├── lib/
-│   │   └── api.ts                 # Axios instance + API functions (authApi, paymentApi, chatApi)
-│   ├── data/
-│   │   └── tarot-data.ts          # Portuguese tarot card metadata (names, images, meanings)
-│   ├── public/
-│   │   └── tarot-cards/           # Card images (m00.jpg - m21.jpg, s01-s10, c01-c10, etc.)
-│   ├── package.json               # npm dependencies + scripts
-│   ├── tailwind.config.ts         # Tailwind CSS configuration
-│   ├── tsconfig.json              # TypeScript configuration
-│   ├── .next/                     # Build output (not committed)
-│   └── next.config.js             # Next.js configuration
-│
-├── tarot-json/                     # Card data repository (JSON files)
-│   └── cards/                     # Standardized tarot deck JSON
-│
-├── public/                         # Static assets (public CDN)
-│   └── tarot-cards/               # Card images
-│
-├── .env                            # Root environment variables
-├── .env.example                    # Template for environment variables
-├── .gitignore                      # Git exclusions
-├── .cursor/                        # Cursor IDE config
-├── .vscode/                        # VS Code config
-├── README.md                       # Project overview
-├── SETUP.md                        # Setup instructions
-├── INSTALLACAO.md                  # Portuguese installation guide
-├── GROQ_SETUP.md                   # Groq API setup
-├── PAYMENT_SETUP.md                # OasisPay setup
-└── test_backend*.py                # Manual backend tests
+│   │   ├── main.py            # Flask app factory: CORS, blueprint registration, error handlers
+│   │   ├── index.py           # Vercel entry: `from api.main import app`
+│   │   ├── routes/            # auth.py, chat.py, payment.py (+ empty __init__.py)
+│   │   ├── services/          # tarot.py (draw/format), llm.py (Groq), payment.py (OasisPay)
+│   │   ├── models/            # user.py, tarot.py (78-card deck), payment.py
+│   │   └── db/                # mongodb.py (singleton), transactions.py, init.py (indexes)
+│   ├── tests/                 # test_auth.py, test_chat.py, test_payment.py, conftest.py
+│   ├── requirements.txt / requirements-dev.txt / setup.py / vercel.json
+│   └── .env                   # MONGODB_URI, GROQ_API_KEY, JWT_SECRET, OASIS_* (git-ignored)
+├── public/
+│   └── tarot-cards/           # Card artwork: m00–m21 majors + c*/p*/s*/w* suits (~78 jpgs)
+├── tarot-json/                # Vendored reference data: tarot.json, tarot-images.json
+│                              # (+ README.md, LICENSE) — source material, not imported
+├── .planning/
+│   └── codebase/              # This doc + ARCHITECTURE.md (generated codebase map)
+├── .env                       # Root env (backend loads backend/.env first, then cwd .env)
+├── .vscode/settings.json      # Editor settings
+├── .cursor/                   # Cursor rules/config
+├── README.md / SETUP.md / INSTALLACAO.md / GROQ_SETUP.md / PAYMENT_SETUP.md
+└── .gitignore
 ```
 
-## Directory Purposes
+Notes:
+- The README's `QuickTarot/vercel.json` + `frontend/` + `backend/` sketch is aspirational:
+  in practice each half has its **own** `vercel.json` (`frontend/vercel.json`,
+  `backend/vercel.json`) and deploys independently.
+- README says "FastAPI" but the code is **Flask** (`backend/api/main.py`); the README's
+  `python -m flask --app api.main:app` command is the accurate one.
+- Two `.env` files exist: root `.env` and `backend/.env`. `main.py` loads
+  `backend/.env` explicitly by path, then plain `load_dotenv()` (cwd). `mongodb.py`
+  also calls `load_dotenv()`. When running Flask from `backend/`, both resolve to the
+  same file; from repo root, the cwd fallback picks up root `.env`.
 
-**`backend/api/routes/`:**
-- Purpose: HTTP endpoint definitions and request/response handling
-- Contains: Flask blueprints with `@bp.route()` decorators
-- Key files: `auth.py` (authentication), `payment.py` (payments), `chat.py` (tarot core)
-- Import pattern: Routes import from services and db layers
+## Key Locations
 
-**`backend/api/services/`:**
-- Purpose: Business logic implementation, external API calls
-- Contains: Pure functions and service classes
-- Key files: `tarot.py` (card logic), `llm.py` (Groq integration), `payment.py` (OasisPay wrapper)
-- Import pattern: Services import from models; routes call services
+| What | Where |
+|---|---|
+| Chat request handler (R$ 1.00 debit + draw + LLM) | `backend/api/routes/chat.py` (`ask_tarot_question`, `QUESTION_PRICE = 1.0`) |
+| Auth: register/login/me, JWT, bcrypt, `@require_auth` | `backend/api/routes/auth.py` |
+| Payments: balance, create-pix, check-status, webhook, `deduct_balance()` | `backend/api/routes/payment.py` |
+| Tarot draw + LLM prompt formatting | `backend/api/services/tarot.py` (`draw_cards`, `format_cards_for_llm`) |
+| Groq interpretation + model fallback chain | `backend/api/services/llm.py` (`generate_tarot_interpretation`) |
+| OasisPay Pix gateway wrapper | `backend/api/services/payment.py` (`OasisPayService.receive_pix`) |
+| 78-card deck constant + `Card`/`Suit` schemas | `backend/api/models/tarot.py` (`TAROT_DECK`) |
+| User schemas (register/login/response) | `backend/api/models/user.py` |
+| Transaction schema | `backend/api/models/payment.py` |
+| Mongo singleton + DB name resolution | `backend/api/db/mongodb.py` (`get_database`) |
+| Transaction CRUD + atomic pending→paid guard | `backend/api/db/transactions.py` |
+| Index bootstrap (unique `users.email`) | `backend/api/db/init.py` (`init_database`) |
+| Vercel serverless adapter | `backend/api/index.py` + `backend/vercel.json` |
+| App root / auth gate → `<Chat />` | `frontend/app/page.tsx` |
+| Root layout, fonts (Cinzel/Cormorant), metadata | `frontend/app/layout.tsx` |
+| Global styles / theme (bordeaux + gold) | `frontend/app/globals.css` |
+| HTTP client + `authApi`/`paymentApi`/`chatApi` + TS types | `frontend/lib/api.ts` |
+| Chat container (send flow, balance state) | `frontend/components/Chat.tsx` |
+| Message bubbles | `frontend/components/Message.tsx` |
+| 9-card spread + animated card | `frontend/components/TarotCards.tsx`, `frontend/components/AnimatedTarotCard.tsx` |
+| LLM markdown renderer | `frontend/components/FormattedTarotText.tsx` |
+| Balance button + Pix modal (QR, polling) | `frontend/components/BuyQuestionButton.tsx`, `frontend/components/PixPaymentModal.tsx` |
+| Client card catalog → artwork URLs | `frontend/data/tarot-data.ts` |
+| Card images served to frontend | `public/tarot-cards/*.jpg` |
+| Backend tests | `backend/tests/test_auth.py`, `backend/tests/test_chat.py`, `backend/tests/test_payment.py`, `backend/tests/conftest.py` |
+| Frontend E2E | `frontend/e2e/ui.spec.ts` |
+| Env vars (API URL for browser) | `frontend/.env` (`NEXT_PUBLIC_API_URL`) + `frontend/next.config.js` |
+| Env vars (secrets: Mongo, Groq, JWT, OasisPay) | `backend/.env` (see `PAYMENT_SETUP.md`, `GROQ_SETUP.md`) |
+| Setup guides | `README.md`, `SETUP.md`, `INSTALLACAO.md`, `GROQ_SETUP.md`, `PAYMENT_SETUP.md` |
 
-**`backend/api/db/`:**
-- Purpose: Database connection and data access operations
-- Contains: MongoDB client initialization, collection operations
-- Key files: `mongodb.py` (connection), `transactions.py` (CRUD)
-- Import pattern: Routes and services call db functions
+Example — balance debit (the money-safety primitive, `backend/api/routes/payment.py`):
 
-**`backend/api/models/`:**
-- Purpose: Data validation and type definitions
-- Contains: Pydantic BaseModel schemas for request/response validation
-- Key files: `user.py`, `tarot.py`, `payment.py`
-- Import pattern: Routes use models to validate request.get_json()
+```python
+def deduct_balance(user_id: str, amount: float) -> bool:
+    db = get_database()
+    users_collection = db.users
+    result = users_collection.find_one_and_update(
+        {"_id": ObjectId(user_id), "balance": {"$gte": amount}},
+        {"$inc": {"balance": -amount}}
+    )
+    return result is not None
+```
 
-**`frontend/app/`:**
-- Purpose: Next.js App Router entry point and root layout
-- Contains: Root page.tsx (auth + Chat), layout.tsx (HTML), globals.css
-- Key files: `page.tsx` (authentication logic), `layout.tsx` (metadata)
+Example — frontend call shape (`frontend/lib/api.ts`):
 
-**`frontend/components/`:**
-- Purpose: Reusable React components
-- Contains: Chat interface, payment modals, message display, animations
-- Key files: `Chat.tsx` (main UI), `BuyQuestionButton.tsx` (payment), `Message.tsx` (display)
-- Pattern: Client components with 'use client' directive
-
-**`frontend/lib/`:**
-- Purpose: Utility functions and API client
-- Contains: Axios instance with token interceptor, typed API functions
-- Key files: `api.ts` (API client with authApi, paymentApi, chatApi namespaces)
-
-**`frontend/data/`:**
-- Purpose: Static data and lookup tables
-- Contains: Tarot card metadata (Portuguese names, meanings, image URLs)
-- Key files: `tarot-data.ts` (card catalog)
-
-## Key File Locations
-
-**Entry Points:**
-- Backend API: `backend/api/main.py` - Flask app initialization, CORS, blueprint registration
-- Frontend App: `frontend/app/page.tsx` - Auth check, login form, Chat component render
-
-**Configuration:**
-- Backend: `backend/requirements.txt` (Python dependencies), `backend/api/main.py` (Flask config)
-- Frontend: `frontend/package.json` (npm dependencies), `frontend/tailwind.config.ts` (Tailwind CSS)
-- Environment: `.env` file (not committed; use `.env.example` as template)
-
-**Core Logic:**
-- Authentication: `backend/api/routes/auth.py` (JWT, bcrypt)
-- Payment Processing: `backend/api/routes/payment.py` (OasisPay integration)
-- Tarot Reading: `backend/api/routes/chat.py` (orchestrates drawing + interpretation)
-- Card Logic: `backend/api/services/tarot.py` (draw_cards function)
-- LLM Integration: `backend/api/services/llm.py` (Groq API calls)
-- Database: `backend/api/db/mongodb.py` (connection), `backend/api/db/transactions.py` (CRUD)
-
-**Testing:**
-- Test files: `test_backend.py`, `test_backend_import.py` (manual tests, not unit test framework)
+```ts
+export const chatApi = {
+  askTarotQuestion: async (question: string): Promise<TarotResponse> => {
+    const response = await api.post('/api/chat/tarot-question', { question });
+    ...
+  },
+};
+```
 
 ## Naming Conventions
 
-**Files:**
-- Python: `snake_case.py` (e.g., `auth.py`, `llm.py`, `mongodb.py`)
-- TypeScript/React: `PascalCase.tsx` for components, `camelCase.ts` for utilities
-- Models/Data: `snake_case.py` for Python, `camelCase.ts` for TypeScript
+- **Backend files**: `snake_case.py` throughout (`tarot.py`, `payment.py`, `mongodb.py`,
+  `transactions.py`, `test_auth.py`). One concern per module; route modules expose a
+  Flask `bp = Blueprint(...)` named after the domain (`'auth'`, `'chat'`, `'payment'`).
+- **Backend symbols**: `snake_case` functions (`draw_cards`, `deduct_balance`,
+  `create_access_token`, `get_current_user`, `require_auth`,
+  `update_transaction_status_if_pending`); `PascalCase` Pydantic models
+  (`UserCreate`, `UserLogin`, `Card`, `TarotReading`, `Transaction`); UPPER_SNAKE
+  constants (`TAROT_DECK`, `QUESTION_PRICE`, `SECRET_KEY`, `ALGORITHM`).
+- **Backend routes**: kebab-case under `/api/<domain>/` prefixes —
+  `/api/auth/register`, `/api/auth/login`, `/api/auth/me`,
+  `/api/payment/balance`, `/api/payment/add-credit`, `/api/payment/create-pix`,
+  `/api/payment/check-status/<transaction_id>`, `/api/payment/webhook`,
+  `/api/chat/tarot-question`. Errors always `{"detail": "<msg>"}`.
+- **Mongo collections**: plural snake_case — `users`, `transactions`, `readings`
+  (documents use `snake_case` keys: `password_hash`, `charge_id`, `pix_code`,
+  `created_at`, `user_id`).
+- **Frontend files**: `PascalCase.tsx` for components (`Chat.tsx`, `PixPaymentModal.tsx`),
+  `camelCase.ts` for modules (`api.ts`, `tarot-data.ts`); App Router files are
+  lowercase by Next.js convention (`page.tsx`, `layout.tsx`, `globals.css`).
+- **Frontend symbols**: `PascalCase` components/interfaces (`Chat`, `ChatMessage`,
+  `TarotResponse`, `TarotCardData`); `camelCase` functions/state
+  (`askTarotQuestion`, `handleSend`, `loadBalance`, `formatBRL`); `*Api` facade
+  objects (`authApi`, `paymentApi`, `chatApi`).
+- **Card assets**: `mNN.jpg` = 22 major arcana (`public/tarot-cards/m00.jpg`…),
+  suit prefixes for minors — `c*` (Copas), `p*` (Paus), `s*` (Espadas), `w*` (Ouros).
+  Frontend `TarotCardData.id` values (`'0'`–`'21'`, suit ids) mirror `tarot-json/`.
+- **Env vars**: `UPPER_SNAKE`, split by consumer — `NEXT_PUBLIC_*` (browser-safe,
+  `NEXT_PUBLIC_API_URL`) vs server-only (`MONGODB_URI`, `GROQ_API_KEY`, `JWT_SECRET`,
+  `OASIS_PUBLIC_KEY`, `OASIS_SECRET_KEY`, `OASIS_WEBHOOK_TOKEN`, `ALLOW_TEST_CREDIT`,
+  `ALLOWED_ORIGINS`).
 
-**Functions:**
-- Python: `snake_case` (e.g., `get_current_user()`, `deduct_balance()`, `draw_cards()`)
-- TypeScript: `camelCase` (e.g., `handleLogin()`, `loadBalance()`)
+## Where To Add New Code
 
-**Variables:**
-- Python: `snake_case` (e.g., `user_id`, `hashed_password`, `access_token`)
-- TypeScript: `camelCase` (e.g., `isLoading`, `setBalance`, `userMessage`)
-
-**Types:**
-- Python: PascalCase classes (e.g., `User`, `Card`, `UserCreate`, `OasisPayService`)
-- TypeScript: PascalCase interfaces/types (e.g., `Message`, `TarotResponse`, `LoginData`)
-
-**Constants:**
-- Python: `UPPER_CASE` (e.g., `QUESTION_PRICE`, `ACCESS_TOKEN_EXPIRE_MINUTES`)
-- TypeScript: `camelCase` for config, `UPPER_CASE` for truly global constants
-
-## Where to Add New Code
-
-**New Feature (e.g., Reading History):**
-- **Primary code:**
-  - Backend route: `backend/api/routes/chat.py` (new endpoint for reading history)
-  - Frontend component: `frontend/components/ReadingHistory.tsx` (new component)
-  - Database access: `backend/api/db/transactions.py` (add query function)
-- **Tests:** Create `test_reading_history.py` in project root following existing test pattern
-
-**New Component/Module (e.g., User Profile):**
-- **Implementation:**
-  - Component: `frontend/components/UserProfile.tsx` (new file)
-  - Route: `backend/api/routes/user.py` (new blueprint if multiple endpoints)
-  - Model: `backend/api/models/user.py` (add UserProfile schema if needed)
-- **Integration:**
-  - Register blueprint in `backend/api/main.py`
-  - Import/render component in `frontend/app/page.tsx` or route
-
-**Shared Utilities:**
-- **Helpers:**
-  - Backend: `backend/api/services/` (add new file e.g., `analytics.py`)
-  - Frontend: `frontend/lib/` (add new file e.g., `formatting.ts`)
-- **Constants/Data:**
-  - Backend: Add to relevant `models/` file or create `constants.py` in `services/`
-  - Frontend: Add to `frontend/data/` if client-specific, or fetch from backend
-
-**Database Operations:**
-- **New CRUD:** Add to `backend/api/db/transactions.py` following existing pattern (functions not classes)
-- **New Collection:** Initialize in `backend/api/db/mongodb.py` if needed, document in `db/init.py`
-
-**API Endpoints:**
-- **New route:** Create function in appropriate file under `backend/api/routes/`
-- **New blueprint:** Create file, register in `backend/api/main.py` line 25-27
-- **Pattern:** Use `@require_auth` decorator for protected endpoints, validate with Pydantic model
-
-**Frontend Pages:**
-- **New page:** Create `.tsx` file in `frontend/app/` (App Router convention)
-- **New component:** Add to `frontend/components/`
-- **Shared logic:** Extract to `frontend/lib/`
-
-## Special Directories
-
-**`.env` File:**
-- Purpose: Environment-specific configuration (secrets, API keys, URLs)
-- Generated: No, must be created per environment
-- Committed: No (listed in `.gitignore`)
-- Required variables: `MONGODB_URI`, `GROQ_API_KEY`, `OASIS_PUBLIC_KEY`, `OASIS_SECRET_KEY`, `JWT_SECRET`
-- Example: See `.env.example` template
-
-**`backend/.env`:**
-- Purpose: Backend-specific environment variables
-- Located: `backend/.env` (not root)
-- Usage: Python `load_dotenv()` loads this automatically
-
-**`tarot-json/`:**
-- Purpose: External card data repository (JSON format)
-- Generated: No, cloned from external repo
-- Committed: Yes
-- Usage: Referenced by frontend for card metadata
-
-**`public/tarot-cards/`:**
-- Purpose: Static card image files
-- Generated: No, manually added
-- Committed: No (images in `.gitignore`)
-- Usage: Serve via CDN or static file server
-
-**`frontend/.next/`:**
-- Purpose: Next.js build output
-- Generated: Yes, created by `npm run build`
-- Committed: No (in `.gitignore`)
-- Usage: Production deployment artifact
-
-**`frontend/node_modules/`:**
-- Purpose: npm dependency directory
-- Generated: Yes, created by `npm install`
-- Committed: No (in `.gitignore`)
-- Usage: Local development dependencies
-
----
-
-*Structure analysis: 2026-07-07*
+| Task | Where | How (follow existing patterns) |
+|---|---|---|
+| New chat/AI endpoint | New or existing module in `backend/api/routes/` + register in `backend/api/main.py` via `app.register_blueprint(<bp>, url_prefix="/api/...")` | Copy `backend/api/routes/chat.py`: `@bp.route(...)` + `@require_auth`, `abort(4xx, description=...)` for errors so the frontend `detail` contract holds; return `jsonify({...})` |
+| New auth-adjacent route | `backend/api/routes/auth.py` | Reuse `require_auth`/`get_current_user()`; never invent a second token scheme |
+| New payment operation | `backend/api/routes/payment.py` + gateway method in `backend/api/services/payment.py` | Keep money movement in atomic single-doc updates (see `deduct_balance()`); credit only on `TRANSACTION_PAID` webhook via `update_transaction_status_if_pending()` in `backend/api/db/transactions.py` — never trust webhook payload amounts |
+| New Mongo collection helper | `backend/api/db/` (new file or extend `transactions.py`) + index in `backend/api/db/init.py` | Use `get_database()` from `backend/api/db/mongodb.py`; add `create_index()` calls in `init_database()` (failure-tolerant pattern) |
+| New Pydantic schema | `backend/api/models/` (`user.py`, `tarot.py`, `payment.py` or a new file) | `BaseModel` + route-level `try/except → abort(400, ...)` as in `auth.py::register` |
+| New LLM behavior/prompt | `backend/api/services/llm.py` (`generate_tarot_interpretation`) and/or `backend/api/services/tarot.py` | Keep the structured PT-BR prompt contract that `FormattedTarotText.tsx` parses; add fallback models to `models_to_try`, don't replace the list blindly |
+| New tarot deck content | `TAROT_DECK` in `backend/api/models/tarot.py` + mirror entry in `frontend/data/tarot-data.ts` + artwork in `public/tarot-cards/` | Backend is source of truth for draws; frontend catalog only maps names → `image_url`; readings store denormalized snapshots so history is unaffected |
+| New frontend component | `frontend/components/<Name>.tsx` (`'use client';` at top) | Presentational components take props (see `Message.tsx`); container logic lives in `Chat.tsx`; styling via Tailwind bordeaux/gold tokens in `frontend/app/globals.css` + `frontend/tailwind.config.ts` |
+| New frontend page/route | `frontend/app/<route>/page.tsx` | App Router convention; reuse `authApi.getMe()` gate from `frontend/app/page.tsx` for anything authenticated |
+| New API client method | `frontend/lib/api.ts` (extend `authApi`/`paymentApi`/`chatApi` + TS interfaces) | Never call axios directly from components; handle `error.response?.data?.detail`; update `localStorage.user` balance when the server returns a new `balance` (pattern in `chatApi.askTarotQuestion`) |
+| New backend test | `backend/tests/test_<domain>.py` using `backend/tests/conftest.py` fixtures | Run `pytest` from `backend/` with `backend/requirements-dev.txt` installed |
+| New E2E test | `frontend/e2e/*.spec.ts` | Run `npm run test:e2e` from `frontend/`; typecheck with `npm run typecheck` |
+| New env var | `backend/.env` (server) or `frontend/.env` + `frontend/next.config.js` (browser, must be `NEXT_PUBLIC_*`) | Document in the matching `*_SETUP.md`; server-only secrets must never get a `NEXT_PUBLIC_` prefix |
